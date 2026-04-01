@@ -103,7 +103,14 @@ class _DefinitionPageState extends State<DefinitionPage> {
     final relative = urlRe.allMatches(inner).map((mm) => mm.group(1)!).toList();
 
     return relative.map((path) {
-      final label = path.contains('/Canadian/') ? 'Canada' : 'France';
+      final parts = path.split('/'); // ['', 'audio', 'en', 'uk', 'Yorkshire', 'en003808-55.mp3']
+      String label = 'Unknown';
+
+      if (parts.length >= 4) {
+        // take the folder just before the filename
+        label = parts[parts.length - 2];
+      }
+
       final absolute = 'https://www.wordreference.com$path';
       return _AudioOption(label, absolute);
     }).toList();
