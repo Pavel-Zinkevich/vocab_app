@@ -16,7 +16,16 @@ class DefinitionPage extends StatefulWidget {
   @override
   State<DefinitionPage> createState() => _DefinitionPageState();
 }
+class _AudioDropdownValue {
+  final int? accentIndex;
+  final double? speed;
 
+  const _AudioDropdownValue.accent(this.accentIndex) : speed = null;
+  const _AudioDropdownValue.speed(this.speed) : accentIndex = null;
+
+  bool get isAccent => accentIndex != null;
+  bool get isSpeed => speed != null;
+}
 // Simple model for a word sense with examples
 class _Sense {
   final String french;
@@ -359,7 +368,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
         // Accent dropdown
         SizedBox(
-          width: 150,
+          width: 180,
           child: InputDecorator(
             decoration: InputDecoration(
               isDense: true,
@@ -368,48 +377,50 @@ class _DefinitionPageState extends State<DefinitionPage> {
               enabledBorder: border,
             ),
             child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: _accentIndex,
-                items: List.generate(
-                  _audio.length,
-                  (i) => DropdownMenuItem(
-                    value: i,
-                    child: Text(_audio[i].label.toUpperCase()),
+              child: DropdownButton<_AudioDropdownValue>(
+                hint: Text( '${_audio[_accentIndex].label.toUpperCase()} • ${(_speed * 100).toInt()}%', ),
+                value: null, // important: allows mixed selection
+                items: [
+                  // 🎧 Accent items
+                  ...List.generate(
+                    _audio.length,
+                    (i) => DropdownMenuItem<_AudioDropdownValue>(
+                      value: _AudioDropdownValue.accent(i),
+                      child: Text(_audio[i].label.toUpperCase()),
+                    ),
                   ),
-                ),
-                onChanged: (i) async {
-                  if (i == null) return;
-                  setState(() => _accentIndex = i);
-                  await _preparePlayer();
-                  await _saveAudioPref();
-                },
-              ),
-            ),
-          ),
-        ),
 
-        // Speed dropdown
-        SizedBox(
-          width: 110,
-          child: InputDecorator(
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              border: border,
-              enabledBorder: border,
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<double>(
-                value: _speed,
-                items: const [
-                  DropdownMenuItem(value: 1.0, child: Text('100%')),
-                  DropdownMenuItem(value: 0.75, child: Text('75%')),
-                  DropdownMenuItem(value: 0.5, child: Text('50%')),
+                  // 🔽 Divider
+                  const DropdownMenuItem<_AudioDropdownValue>(
+                    enabled: false,
+                    child: Divider(thickness: 1),
+                  ),
+
+                  // ⚡ Speed items
+                  const DropdownMenuItem(
+                    value: _AudioDropdownValue.speed(1.0),
+                    child: Text('100%'),
+                  ),
+                  const DropdownMenuItem(
+                    value: _AudioDropdownValue.speed(0.75),
+                    child: Text('75%'),
+                  ),
+                  const DropdownMenuItem(
+                    value: _AudioDropdownValue.speed(0.5),
+                    child: Text('50%'),
+                  ),
                 ],
-                onChanged: (v) async {
-                  if (v == null) return;
-                  setState(() => _speed = v);
-                  await _player.setSpeed(v);
+                onChanged: (val) async {
+                  if (val == null) return;
+
+                  if (val.isAccent) {
+                    setState(() => _accentIndex = val.accentIndex!);
+                    await _preparePlayer();
+                  } else if (val.isSpeed) {
+                    setState(() => _speed = val.speed!);
+                    await _player.setSpeed(_speed);
+                  }
+
                   await _saveAudioPref();
                 },
               ),
