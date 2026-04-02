@@ -3,7 +3,20 @@ import 'tabs/vocabulary_tab.dart';
 import 'tabs/training_tab.dart';
 import 'tabs/profile_tab.dart';
 
-void main() => runApp(VocabApp());
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+import 'package:flutter/widgets.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  runApp(VocabApp());
+}
 
 class VocabApp extends StatelessWidget {
   @override
@@ -13,7 +26,8 @@ class VocabApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.grey[200], // light grey background for the whole app
+        scaffoldBackgroundColor:
+            Colors.grey[200], // light grey background for the whole app
       ),
       home: HomePage(),
     );
