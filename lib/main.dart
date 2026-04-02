@@ -7,6 +7,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 import 'package:flutter/widgets.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'pages/login_page.dart';
+import 'pages/register_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +32,30 @@ class VocabApp extends StatelessWidget {
         scaffoldBackgroundColor:
             Colors.grey[200], // light grey background for the whole app
       ),
-      home: HomePage(),
+      home: AuthGate(),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final user = snapshot.data;
+        if (user == null) {
+          return LoginPage();
+        } else {
+          return HomePage();
+        }
+      },
     );
   }
 }
