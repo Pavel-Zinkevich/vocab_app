@@ -1,185 +1,125 @@
 import 'package:flutter/material.dart';
 import '../pages/definition_page.dart';
 
+/// A StatefulWidget representing the Vocabulary tab
 class VocabularyTab extends StatefulWidget {
   @override
   State<VocabularyTab> createState() => _VocabularyTabState();
 }
 
 class _VocabularyTabState extends State<VocabularyTab> {
+  /// List of words, each word is represented as a map with keys: 'word', 'translation', 'context'
   final List<Map<String, String>> _words = [
-    {'word': 'Apple', 'context': 'A fruit', "translation": "Manzana"},
-    {'word': 'Run', 'context': 'To move fast on feet', "translation": "Correr"},
-    {'word': 'Hello', 'context': 'A greeting', "translation": "Hola"},
+    {'word': 'Apple', 'context': 'A fruit', 'translation': 'Manzana'},
+    {'word': 'Run', 'context': 'To move fast on feet', 'translation': 'Correr'},
+    {'word': 'Hello', 'context': 'A greeting', 'translation': 'Hola'},
   ];
 
+  /// Shows a dialog to add a new word
   void _showAddWordDialog() {
+    // Controllers for text fields
     final wordController = TextEditingController();
+    final translationController = TextEditingController();
     final contextController = TextEditingController();
+
+    /// Handles adding the new word to the list
+    void addWord() {
+      final word = wordController.text.trim();
+      final translation = translationController.text.trim();
+      final contextText = contextController.text.trim();
+
+      if (word.isEmpty) {
+        // Show a snackbar if word is empty
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Please enter a word')));
+        return;
+      }
+
+      // Add the new word at the beginning of the list
+      setState(() {
+        _words.insert(0, {
+          'word': word,
+          'translation': translation,
+          'context': contextText,
+        });
+      });
+
+      // Close the dialog
+      Navigator.of(context).pop();
+    }
 
     showDialog<void>(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: true, // Allow closing by tapping outside
       builder: (context) {
-        final mq = MediaQuery.of(context);
-        final isWide = mq.size.width >= 600;
+        final isWide = MediaQuery.of(context).size.width >= 600;
 
-        // Use a Dialog with adaptive inset padding so on phones it can be nearly full-width
+        /// Helper function to create a styled input field
+        InputDecoration inputDecoration(String hint) => InputDecoration(
+              hintText: hint,
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(vertical: 16),
+            );
+
+        /// Builds a container with a TextField and consistent styling
+        Widget buildInput(
+            TextEditingController controller, String hint, Color color) {
+          return Container(
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+              ],
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: TextField(
+                controller: controller, decoration: inputDecoration(hint)),
+          );
+        }
+
+        // The actual dialog widget
         return Dialog(
-          insetPadding: EdgeInsets.symmetric(
-              horizontal: isWide ? 40.0 : 8.0, vertical: 24.0),
+          insetPadding:
+              EdgeInsets.symmetric(horizontal: isWide ? 40 : 8, vertical: 24),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 800),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.min, // Wrap content vertically
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Add new word',
+                  Text('Add New Word',
                       style: Theme.of(context).textTheme.titleLarge),
                   SizedBox(height: 12),
-
-                  // White rounded input for Word
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color.fromARGB(255, 209, 47, 147),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2))
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: TextField(
-                      controller: wordController,
-                      decoration: InputDecoration(
-                        hintText: 'Word',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
+                  // Word input
+                  buildInput(wordController, 'Word', Colors.white),
                   SizedBox(height: 12),
-
-                  // White rounded input for Word
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2))
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: TextField(
-                      controller: wordController,
-                      decoration: InputDecoration(
-                        hintText: 'Translation ',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
+                  // Translation input
+                  buildInput(
+                      translationController, 'Translation', Colors.white),
                   SizedBox(height: 12),
-
-                  // White rounded input for Context
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color.fromARGB(255, 176, 45, 45),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2))
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: TextField(
-                      controller: contextController,
-                      decoration: InputDecoration(
-                        hintText: 'Context',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
-
+                  // Context input
+                  buildInput(contextController, 'Context', Colors.white),
                   SizedBox(height: 16),
-
-                  // Action row: responsive button
-                  if (isWide)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          final word = wordController.text.trim();
-                          final ctx = contextController.text.trim();
-                          if (word.isNotEmpty) {
-                            setState(() {
-                              _words.insert(0, {
-                                'word': word,
-                                'context': ctx,
-                                "translation": ""
-                              });
-                            });
-                            Navigator.of(context).pop();
-                          } else {
-                            // show a simple feedback
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Please enter a word')));
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              const Color.fromARGB(255, 22, 139, 78),
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                        icon: Icon(Icons.add),
-                        label: Text('+ Add New Word'),
-                      ),
-                    )
-                  else
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          final word = wordController.text.trim();
-                          final ctx = contextController.text.trim();
-                          if (word.isNotEmpty) {
-                            setState(() {
-                              _words.insert(0, {
-                                'word': word,
-                                'context': ctx,
-                                "translation": ""
-                              });
-                            });
-                            Navigator.of(context).pop();
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Please enter a word')));
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              const Color.fromARGB(255, 37, 132, 8),
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                        child: Text('Add New Word',
-                            style: TextStyle(fontSize: 16)),
+                  // Add Word button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: addWord,
+                      icon: Icon(Icons.add),
+                      label: Text('Add Word'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding:
+                            EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
@@ -201,18 +141,18 @@ class _VocabularyTabState extends State<VocabularyTab> {
               itemBuilder: (context, index) {
                 final item = _words[index];
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      // Open definition page
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) =>
-                              DefinitionPage(word: item['word'] ?? '')));
-                    },
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            DefinitionPage(word: item['word'] ?? ''),
+                      ),
+                    ),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: const Color.fromARGB(255, 17, 119, 32),
+                        color: Colors.green[800],
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
@@ -226,34 +166,27 @@ class _VocabularyTabState extends State<VocabularyTab> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Word and translation row
                           Row(
                             children: [
-                              Text(
-                                item['word'] ?? '',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600),
-                              ),
-                              Text(' - '),
-                              Text(
-                                item['translation'] ?? '',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600),
-                              ),
+                              Text(item['word'] ?? '',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white)),
+                              Text(' - ',
+                                  style: TextStyle(color: Colors.white)),
+                              Text(item['translation'] ?? '',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white)),
                             ],
                           ),
                           SizedBox(height: 6),
-                          Text(
-                            item['context'] ?? '',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
+                          // Context description
+                          Text(item['context'] ?? '',
+                              style: TextStyle(color: Colors.white70)),
                         ],
                       ),
                     ),
@@ -261,6 +194,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                 );
               },
             ),
+      // Bottom button to add a new word
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
