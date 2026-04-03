@@ -74,7 +74,8 @@ class _RegisterPageState extends State<RegisterPage> {
                         decoration: InputDecoration(labelText: 'Email'),
                         keyboardType: TextInputType.emailAddress,
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Email is required';
+                          if (v == null || v.trim().isEmpty)
+                            return 'Email is required';
                           if (!v.contains('@')) return 'Enter a valid email';
                           return null;
                         },
@@ -85,8 +86,13 @@ class _RegisterPageState extends State<RegisterPage> {
                         decoration: InputDecoration(labelText: 'Password'),
                         obscureText: true,
                         validator: (v) {
-                          if (v == null || v.isEmpty) return 'Password is required';
-                          if (v.length < 6) return 'Password must be at least 6 characters';
+                          if (v == null || v.isEmpty)
+                            return 'Password is required';
+                          if (v.length < 6)
+                            return 'Password must be at least 6 characters';
+                          if (!RegExp(r'[A-Za-z]').hasMatch(v)) {
+                            return 'Password must contain at least one letter';
+                          }
                           return null;
                         },
                       ),
@@ -94,14 +100,19 @@ class _RegisterPageState extends State<RegisterPage> {
                       if (_error != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12.0),
-                          child: Text(_error!, style: TextStyle(color: Colors.red)),
+                          child: Text(_error!,
+                              style: TextStyle(color: Colors.red)),
                         ),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: _loading ? null : _register,
                           child: _loading
-                              ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              ? SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
                               : Text('Create account'),
                         ),
                       ),

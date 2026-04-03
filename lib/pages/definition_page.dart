@@ -11,11 +11,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 class DefinitionPage extends StatefulWidget {
   final String word;
   final bool showAudio;
-  const DefinitionPage({Key? key, required this.word, this.showAudio = true}) : super(key: key);
+  const DefinitionPage({Key? key, required this.word, this.showAudio = true})
+      : super(key: key);
 
   @override
   State<DefinitionPage> createState() => _DefinitionPageState();
 }
+
 class _AudioDropdownValue {
   final int? accentIndex;
   final double? speed;
@@ -26,6 +28,7 @@ class _AudioDropdownValue {
   bool get isAccent => accentIndex != null;
   bool get isSpeed => speed != null;
 }
+
 // Simple model for a word sense with examples
 class _Sense {
   final String french;
@@ -82,7 +85,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
   Future<void> _saveAudioPref() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('wr_audio-fr', '$_accentIndex:${_speed.toStringAsFixed(2)}');
+    await prefs.setString(
+        'wr_audio-fr', '$_accentIndex:${_speed.toStringAsFixed(2)}');
   }
 
   Future<void> _preparePlayer() async {
@@ -103,7 +107,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
     final relative = urlRe.allMatches(inner).map((mm) => mm.group(1)!).toList();
 
     return relative.map((path) {
-      final parts = path.split('/'); // ['', 'audio', 'en', 'uk', 'Yorkshire', 'en003808-55.mp3']
+      final parts = path.split(
+          '/'); // ['', 'audio', 'en', 'uk', 'Yorkshire', 'en003808-55.mp3']
       String label = 'Unknown';
 
       if (parts.length >= 4) {
@@ -135,7 +140,9 @@ class _DefinitionPageState extends State<DefinitionPage> {
         final document = html_parser.parse(body);
 
         // Remove script/style elements to avoid noise
-        document.querySelectorAll('script, style, noscript').forEach((e) => e.remove());
+        document
+            .querySelectorAll('script, style, noscript')
+            .forEach((e) => e.remove());
 
         // IPA (if present)
         _ipa = document.querySelector('#pronWR')?.text.trim();
@@ -155,7 +162,13 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
         // Fallback selectors if #articleWRD isn't present
         if (content == null) {
-          final selectors = ['#article', '#content', '.entry', '.WRD', '#centerCol'];
+          final selectors = [
+            '#article',
+            '#content',
+            '.entry',
+            '.WRD',
+            '#centerCol'
+          ];
           for (final sel in selectors) {
             final el = document.querySelector(sel);
             if (el != null) {
@@ -172,7 +185,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
           final tables = content.querySelectorAll('table');
           for (final table in tables) {
             final classAttr = (table.attributes['class'] ?? '').toLowerCase();
-            if (!classAttr.contains('wrd')) continue; // skip non-translation tables
+            if (!classAttr.contains('wrd'))
+              continue; // skip non-translation tables
 
             for (final tr in table.querySelectorAll('tr')) {
               // skip header rows
@@ -185,11 +199,15 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
               // If a translation row
               if (frTd != null || toTd != null) {
-                final french = frTd?.text.replaceAll(RegExp(r"\s+"), ' ').trim() ?? '';
-                final translation = toTd?.text.replaceAll(RegExp(r"\s+"), ' ').trim() ?? '';
+                final french =
+                    frTd?.text.replaceAll(RegExp(r"\s+"), ' ').trim() ?? '';
+                final translation =
+                    toTd?.text.replaceAll(RegExp(r"\s+"), ' ').trim() ?? '';
                 final low = (french + ' ' + translation).toLowerCase();
                 // Skip rows that are not real definitions
-                if (low.contains('principales traductions') || low.contains('français-anglais') || french.isEmpty) {
+                if (low.contains('principales traductions') ||
+                    low.contains('français-anglais') ||
+                    french.isEmpty) {
                   continue;
                 }
 
@@ -203,12 +221,16 @@ class _DefinitionPageState extends State<DefinitionPage> {
                 if ((frExTd != null || toExTd != null) && _senses.isNotEmpty) {
                   final last = _senses.last;
                   if (frExTd != null) {
-                    final fe = frExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-                    if (fe.isNotEmpty) last.frExamples.add(unescape.convert(fe));
+                    final fe =
+                        frExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+                    if (fe.isNotEmpty)
+                      last.frExamples.add(unescape.convert(fe));
                   }
                   if (toExTd != null) {
-                    final te = toExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-                    if (te.isNotEmpty) last.enExamples.add(unescape.convert(te));
+                    final te =
+                        toExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+                    if (te.isNotEmpty)
+                      last.enExamples.add(unescape.convert(te));
                   }
                 }
               } else if (frExTd != null || toExTd != null) {
@@ -216,12 +238,16 @@ class _DefinitionPageState extends State<DefinitionPage> {
                 if (_senses.isNotEmpty) {
                   final lastSense = _senses.last;
                   if (frExTd != null) {
-                    final fe = frExTd.text.replaceAll(RegExp(r"\s+"), ' ').trim();
-                    if (fe.isNotEmpty) lastSense.frExamples.add(unescape.convert(fe));
+                    final fe =
+                        frExTd.text.replaceAll(RegExp(r"\s+"), ' ').trim();
+                    if (fe.isNotEmpty)
+                      lastSense.frExamples.add(unescape.convert(fe));
                   }
                   if (toExTd != null) {
-                    final te = toExTd.text.replaceAll(RegExp(r"\s+"), ' ').trim();
-                    if (te.isNotEmpty) lastSense.enExamples.add(unescape.convert(te));
+                    final te =
+                        toExTd.text.replaceAll(RegExp(r"\s+"), ' ').trim();
+                    if (te.isNotEmpty)
+                      lastSense.enExamples.add(unescape.convert(te));
                   }
                 }
               }
@@ -230,12 +256,15 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
           // Deduplicate examples within each sense
           for (final s in _senses) {
-            s.frExamples.replaceRange(0, s.frExamples.length, s.frExamples.toSet().toList());
-            s.enExamples.replaceRange(0, s.enExamples.length, s.enExamples.toSet().toList());
+            s.frExamples.replaceRange(
+                0, s.frExamples.length, s.frExamples.toSet().toList());
+            s.enExamples.replaceRange(
+                0, s.enExamples.length, s.enExamples.toSet().toList());
           }
 
           if (_senses.isEmpty) {
-            _error = 'No definition found for "${widget.word}" on WordReference.';
+            _error =
+                'No definition found for "${widget.word}" on WordReference.';
           }
         }
       } else if (resp.statusCode == 404) {
@@ -301,7 +330,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
           children: [
             Text(_error ?? 'Unknown error', textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _fetchDefinition, child: const Text('Retry')),
+            ElevatedButton(
+                onPressed: _fetchDefinition, child: const Text('Retry')),
           ],
         ),
       ),
@@ -337,8 +367,10 @@ class _DefinitionPageState extends State<DefinitionPage> {
             physics: const NeverScrollableScrollPhysics(),
             shrinkWrap: true,
             itemCount: _senses.length,
-            separatorBuilder: (_, __) => const Divider(height: 24, thickness: 0.6),
-            itemBuilder: (context, i) => _SenseTile(index: i, sense: _senses[i]),
+            separatorBuilder: (_, __) =>
+                const Divider(height: 24, thickness: 0.6),
+            itemBuilder: (context, i) =>
+                _SenseTile(index: i, sense: _senses[i]),
           ),
       ],
     );
@@ -379,13 +411,16 @@ class _DefinitionPageState extends State<DefinitionPage> {
           child: InputDecorator(
             decoration: InputDecoration(
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               border: border,
               enabledBorder: border,
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<_AudioDropdownValue>(
-                hint: Text( '${_audio[_accentIndex].label.toUpperCase()} • ${(_speed * 100).toInt()}%', ),
+                hint: Text(
+                  '${_audio[_accentIndex].label.toUpperCase()} • ${(_speed * 100).toInt()}%',
+                ),
                 value: null, // important: allows mixed selection
                 items: [
                   // 🎧 Accent items
@@ -507,9 +542,11 @@ class _SenseTile extends StatelessWidget {
                 text: '${index + 1}. ',
                 style: base?.copyWith(fontWeight: FontWeight.w600),
               ),
-              ..._formatTermSpans(sense.french, isLemma: true, base: base, pos: posStyle),
+              ..._formatTermSpans(sense.french,
+                  isLemma: true, base: base, pos: posStyle),
               TextSpan(text: '  →  ', style: arrowStyle),
-              ..._formatTermSpans(sense.translation, isLemma: false, base: base, pos: posStyle),
+              ..._formatTermSpans(sense.translation,
+                  isLemma: false, base: base, pos: posStyle),
             ],
           ),
         ),
@@ -562,7 +599,8 @@ class _SenseTile extends StatelessWidget {
     if (match == null) {
       spans.add(TextSpan(
         text: raw,
-        style: base?.copyWith(fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600),
+        style: base?.copyWith(
+            fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600),
       ));
       return spans;
     }
@@ -574,7 +612,8 @@ class _SenseTile extends StatelessWidget {
     if (before.isNotEmpty) {
       spans.add(TextSpan(
         text: before,
-        style: base?.copyWith(fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600),
+        style: base?.copyWith(
+            fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600),
       ));
     }
     spans.add(TextSpan(text: ' ${posToken.toLowerCase()}', style: pos));

@@ -30,7 +30,7 @@ class VocabApp extends StatelessWidget {
         useMaterial3: true,
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor:
-            Colors.grey[200], // light grey background for the whole app
+            const Color.fromARGB(255, 167, 86, 86), // light grey background for the whole app
       ),
       home: AuthGate(),
     );
