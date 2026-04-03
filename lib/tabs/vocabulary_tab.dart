@@ -8,9 +8,9 @@ class VocabularyTab extends StatefulWidget {
 
 class _VocabularyTabState extends State<VocabularyTab> {
   final List<Map<String, String>> _words = [
-    {'word': 'Apple', 'context': 'A fruit'},
-    {'word': 'Run', 'context': 'To move fast on feet'},
-    {'word': 'Hello', 'context': 'A greeting'},
+    {'word': 'Apple', 'context': 'A fruit', "translation": "Manzana"},
+    {'word': 'Run', 'context': 'To move fast on feet', "translation": "Correr"},
+    {'word': 'Hello', 'context': 'A greeting', "translation": "Hola"},
   ];
 
   void _showAddWordDialog() {
@@ -26,7 +26,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
         // Use a Dialog with adaptive inset padding so on phones it can be nearly full-width
         return Dialog(
-          insetPadding: EdgeInsets.symmetric(horizontal: isWide ? 40.0 : 8.0, vertical: 24.0),
+          insetPadding: EdgeInsets.symmetric(
+              horizontal: isWide ? 40.0 : 8.0, vertical: 24.0),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 800),
             child: Padding(
@@ -35,15 +36,21 @@ class _VocabularyTabState extends State<VocabularyTab> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Add new word', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Add new word',
+                      style: Theme.of(context).textTheme.titleLarge),
                   SizedBox(height: 12),
 
                   // White rounded input for Word
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color.fromARGB(255, 209, 47, 147),
                       borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 4,
+                            offset: Offset(0, 2))
+                      ],
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: TextField(
@@ -55,15 +62,43 @@ class _VocabularyTabState extends State<VocabularyTab> {
                       ),
                     ),
                   ),
+                  SizedBox(height: 12),
 
+                  // White rounded input for Word
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 4,
+                            offset: Offset(0, 2))
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: TextField(
+                      controller: wordController,
+                      decoration: InputDecoration(
+                        hintText: 'Translation ',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
                   SizedBox(height: 12),
 
                   // White rounded input for Context
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color.fromARGB(255, 176, 45, 45),
                       borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 4,
+                            offset: Offset(0, 2))
+                      ],
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: TextField(
@@ -88,18 +123,26 @@ class _VocabularyTabState extends State<VocabularyTab> {
                           final ctx = contextController.text.trim();
                           if (word.isNotEmpty) {
                             setState(() {
-                              _words.insert(0, {'word': word, 'context': ctx});
+                              _words.insert(0, {
+                                'word': word,
+                                'context': ctx,
+                                "translation": ""
+                              });
                             });
                             Navigator.of(context).pop();
                           } else {
                             // show a simple feedback
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please enter a word')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Please enter a word')));
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          backgroundColor:
+                              const Color.fromARGB(255, 22, 139, 78),
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
                         ),
                         icon: Icon(Icons.add),
                         label: Text('+ Add New Word'),
@@ -114,19 +157,27 @@ class _VocabularyTabState extends State<VocabularyTab> {
                           final ctx = contextController.text.trim();
                           if (word.isNotEmpty) {
                             setState(() {
-                              _words.insert(0, {'word': word, 'context': ctx});
+                              _words.insert(0, {
+                                'word': word,
+                                'context': ctx,
+                                "translation": ""
+                              });
                             });
                             Navigator.of(context).pop();
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please enter a word')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Please enter a word')));
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
+                          backgroundColor:
+                              const Color.fromARGB(255, 37, 132, 8),
                           padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
                         ),
-                        child: Text('Add New Word', style: TextStyle(fontSize: 16)),
+                        child: Text('Add New Word',
+                            style: TextStyle(fontSize: 16)),
                       ),
                     ),
                 ],
@@ -155,21 +206,48 @@ class _VocabularyTabState extends State<VocabularyTab> {
                     borderRadius: BorderRadius.circular(12),
                     onTap: () {
                       // Open definition page
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => DefinitionPage(word: item['word'] ?? '')));
+                      Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) =>
+                              DefinitionPage(word: item['word'] ?? '')));
                     },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: const Color.fromARGB(255, 17, 119, 32),
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 4,
+                              offset: Offset(0, 2))
+                        ],
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            item['word'] ?? '',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 18, fontWeight: FontWeight.w600),
+                          Row(
+                            children: [
+                              Text(
+                                item['word'] ?? '',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600),
+                              ),
+                              Text(' - '),
+                              Text(
+                                item['translation'] ?? '',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600),
+                              ),
+                            ],
                           ),
                           SizedBox(height: 6),
                           Text(
@@ -192,9 +270,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
               onPressed: _showAddWordDialog,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
-              child: Text('Add New Word', style: TextStyle(color: Colors.white, fontSize: 16)),
+              child: Text('Add New Word',
+                  style: TextStyle(color: Colors.white, fontSize: 16)),
             ),
           ),
         ),
