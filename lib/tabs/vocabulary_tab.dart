@@ -33,9 +33,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
       if (user == null) return;
 
       try {
-        final docRef = await _firestore
+        await _firestore
             .collection('users')
-            .doc(user?.uid ?? 'unknown')
+            .doc(user.uid)
             .collection('vocabulary')
             .add({
           'word': word,
@@ -125,6 +125,47 @@ class _VocabularyTabState extends State<VocabularyTab> {
     );
   }
 
+  Future<void> _deleteWord(String docId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Word?'),
+        content: Text('Are you sure you want to delete this word?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('vocabulary')
+          .doc(docId)
+          .delete();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Word deleted')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to delete word: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _auth.currentUser;
@@ -206,27 +247,17 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                     color: Colors.white),
                               ),
                             ),
-                            IconButton(
-                              icon: Icon(Icons.delete, color: Colors.redAccent),
-                              onPressed: () async {
-                                try {
-                                  await _firestore
-                                      .collection('users')
-                                      .doc(user?.uid ?? 'unknown')
-                                      .collection('vocabulary')
-                                      .doc(doc.id)
-                                      .delete();
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Word deleted')));
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                          content: Text(
-                                              'Failed to delete word: $e')));
-                                }
-                              },
+                            // 🔥 Improved Delete Button
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.redAccent.withOpacity(0.2),
+                              ),
+                              child: IconButton(
+                                icon:
+                                    Icon(Icons.close, color: Colors.redAccent),
+                                onPressed: () => _deleteWord(doc.id),
+                              ),
                             ),
                           ],
                         ),
@@ -251,18 +282,17 @@ class _VocabularyTabState extends State<VocabularyTab> {
         label: Text(
           "Add a New Word",
           style: TextStyle(
-            color: Colors.white, // White text
-            fontSize: 16, // Bigger font
+            color: Colors.white,
+            fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
         ),
-        icon: Icon(Icons.add, color: Colors.white), // Optional icon
-        backgroundColor: Colors.deepPurple, // Button color
+        icon: Icon(Icons.add, color: Colors.white),
+        backgroundColor: Colors.deepPurple,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16), // Rounded corners
+          borderRadius: BorderRadius.circular(16),
         ),
-        extendedPadding:
-            EdgeInsets.symmetric(horizontal: 24, vertical: 16), // Larger size
+        extendedPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
