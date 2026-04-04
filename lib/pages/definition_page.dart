@@ -1,16 +1,16 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:html_unescape/html_unescape.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart' as dom;
+import 'package:html_unescape/html_unescape.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:html/dom.dart' as dom;
 
 class DefinitionPage extends StatefulWidget {
   final String word;
   final bool showAudio;
+
   const DefinitionPage({Key? key, required this.word, this.showAudio = true})
       : super(key: key);
 
@@ -18,6 +18,7 @@ class DefinitionPage extends StatefulWidget {
   State<DefinitionPage> createState() => _DefinitionPageState();
 }
 
+/// --- Audio dropdown model ---
 class _AudioDropdownValue {
   final int? accentIndex;
   final double? speed;
@@ -29,7 +30,7 @@ class _AudioDropdownValue {
   bool get isSpeed => speed != null;
 }
 
-// Simple model for a word sense with examples
+/// --- Word sense model ---
 class _Sense {
   final String french;
   final String translation;
@@ -39,10 +40,11 @@ class _Sense {
   _Sense({required this.french, required this.translation});
 }
 
-// Audio option (accent + url)
+/// --- Audio option model ---
 class _AudioOption {
   final String label;
   final String url;
+
   _AudioOption(this.label, this.url);
 }
 
@@ -51,7 +53,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
   String? _error;
   final List<_Sense> _senses = [];
 
-  // Audio state
   final _player = AudioPlayer();
   List<_AudioOption> _audio = [];
   int _accentIndex = 0;
@@ -71,6 +72,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     super.dispose();
   }
 
+  /// --- Audio Preferences ---
   Future<void> _restoreAudioPref() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('wr_audio-fr'); // "index:speed"
@@ -91,42 +93,37 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
   Future<void> _preparePlayer() async {
     if (_audio.isEmpty) return;
-    final idx = _accentIndex.clamp(0, _audio.length - 1);
-    _accentIndex = idx;
-    await _player.setUrl(_audio[idx].url);
+    _accentIndex = _accentIndex.clamp(0, _audio.length - 1);
+    await _player.setUrl(_audio[_accentIndex].url);
     await _player.setSpeed(_speed);
   }
 
-  // Extracts window.audioFiles = ['...mp3','...mp3'];
+  /// --- Extract audio files from HTML ---
   List<_AudioOption> _extractAudioFiles(String html) {
-    final re = RegExp(r'window\.audioFiles\s*=\s*\[(.*?)\];', dotAll: true);
-    final m = re.firstMatch(html);
-    if (m == null) return [];
-    final inner = m.group(1)!;
-    final urlRe = RegExp(r"'([^']+\.mp3)'");
-    final relative = urlRe.allMatches(inner).map((mm) => mm.group(1)!).toList();
+    final match = RegExp(r"window\.audioFiles\s*=\s*\[(.*?)\];", dotAll: true)
+        .firstMatch(html);
+    if (match == null) return [];
 
-    return relative.map((path) {
-      final parts = path.split(
-          '/'); // ['', 'audio', 'en', 'uk', 'Yorkshire', 'en003808-55.mp3']
-      String label = 'Unknown';
+    final urls = RegExp(r"'([^']+\.mp3)'")
+        .allMatches(match.group(1)!)
+        .map((m) => m.group(1)!)
+        .toList();
 
-      if (parts.length >= 4) {
-        // take the folder just before the filename
-        label = parts[parts.length - 2];
-      }
-
+    return urls.map((path) {
+      final parts = path.split('/');
+      final label = parts.length >= 4 ? parts[parts.length - 2] : 'Unknown';
       final absolute = 'https://www.wordreference.com$path';
       return _AudioOption(label, absolute);
     }).toList();
   }
 
+  /// --- Fetch and parse definition ---
   Future<void> _fetchDefinition() async {
     setState(() {
       _loading = true;
       _error = null;
       _senses.clear();
-      _audio = [];
+      _audio.clear();
       _ipa = null;
     });
 
@@ -135,154 +132,115 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
     try {
       final resp = await http.get(url).timeout(const Duration(seconds: 12));
-      if (resp.statusCode == 200) {
-        final body = resp.body;
-        final document = html_parser.parse(body);
 
-        // Remove script/style elements to avoid noise
-        document
-            .querySelectorAll('script, style, noscript')
-            .forEach((e) => e.remove());
-
-        // IPA (if present)
-        _ipa = document.querySelector('#pronWR')?.text.trim();
-
-        // Audio sources (France / Canada, etc.) - only if audio is enabled
-        if (widget.showAudio) {
-          _audio = _extractAudioFiles(body);
-          try {
-            await _preparePlayer();
-          } catch (_) {
-            // ignore player prepare errors
-          }
-        }
-
-        // Prefer the div that contains WordReference translations/examples
-        dom.Element? content = document.querySelector('#articleWRD');
-
-        // Fallback selectors if #articleWRD isn't present
-        if (content == null) {
-          final selectors = [
-            '#article',
-            '#content',
-            '.entry',
-            '.WRD',
-            '#centerCol'
-          ];
-          for (final sel in selectors) {
-            final el = document.querySelector(sel);
-            if (el != null) {
-              content = el;
-              break;
-            }
-          }
-        }
-
-        final unescape = HtmlUnescape();
-
-        if (content != null) {
-          // Focus on tables with class WRD (translation tables)
-          final tables = content.querySelectorAll('table');
-          for (final table in tables) {
-            final classAttr = (table.attributes['class'] ?? '').toLowerCase();
-            if (!classAttr.contains('wrd'))
-              continue; // skip non-translation tables
-
-            for (final tr in table.querySelectorAll('tr')) {
-              // skip header rows
-              if (tr.querySelectorAll('th').isNotEmpty) continue;
-
-              final frTd = tr.querySelector('td.FrWrd');
-              final toTd = tr.querySelector('td.ToWrd');
-              final frExTd = tr.querySelector("td.FrEx");
-              final toExTd = tr.querySelector("td.ToEx");
-
-              // If a translation row
-              if (frTd != null || toTd != null) {
-                final french =
-                    frTd?.text.replaceAll(RegExp(r"\s+"), ' ').trim() ?? '';
-                final translation =
-                    toTd?.text.replaceAll(RegExp(r"\s+"), ' ').trim() ?? '';
-                final low = (french + ' ' + translation).toLowerCase();
-                // Skip rows that are not real definitions
-                if (low.contains('principales traductions') ||
-                    low.contains('français-anglais') ||
-                    french.isEmpty) {
-                  continue;
-                }
-
-                final sense = _Sense(
-                  french: unescape.convert(french),
-                  translation: unescape.convert(translation),
-                );
-                _senses.add(sense);
-
-                // If this same row also includes examples, attach them
-                if ((frExTd != null || toExTd != null) && _senses.isNotEmpty) {
-                  final last = _senses.last;
-                  if (frExTd != null) {
-                    final fe =
-                        frExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-                    if (fe.isNotEmpty)
-                      last.frExamples.add(unescape.convert(fe));
-                  }
-                  if (toExTd != null) {
-                    final te =
-                        toExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-                    if (te.isNotEmpty)
-                      last.enExamples.add(unescape.convert(te));
-                  }
-                }
-              } else if (frExTd != null || toExTd != null) {
-                // Attach examples to the last parsed sense if present
-                if (_senses.isNotEmpty) {
-                  final lastSense = _senses.last;
-                  if (frExTd != null) {
-                    final fe =
-                        frExTd.text.replaceAll(RegExp(r"\s+"), ' ').trim();
-                    if (fe.isNotEmpty)
-                      lastSense.frExamples.add(unescape.convert(fe));
-                  }
-                  if (toExTd != null) {
-                    final te =
-                        toExTd.text.replaceAll(RegExp(r"\s+"), ' ').trim();
-                    if (te.isNotEmpty)
-                      lastSense.enExamples.add(unescape.convert(te));
-                  }
-                }
-              }
-            }
-          }
-
-          // Deduplicate examples within each sense
-          for (final s in _senses) {
-            s.frExamples.replaceRange(
-                0, s.frExamples.length, s.frExamples.toSet().toList());
-            s.enExamples.replaceRange(
-                0, s.enExamples.length, s.enExamples.toSet().toList());
-          }
-
-          if (_senses.isEmpty) {
-            _error =
-                'No definition found for "${widget.word}" on WordReference.';
-          }
-        }
-      } else if (resp.statusCode == 404) {
-        _error = 'Word not found on WordReference.';
+      if (resp.statusCode != 200) {
+        _error = resp.statusCode == 404
+            ? 'Word not found on WordReference.'
+            : 'Server error (${resp.statusCode}). Please try again.';
       } else {
-        _error = 'Server error (${resp.statusCode}). Please try again.';
+        _parseHtml(resp.body);
       }
-    } on Exception catch (e) {
+    } catch (e) {
       _error = 'Failed to fetch definition. ${e.toString()}';
     }
 
-    if (mounted) {
-      setState(() {
-        _loading = false;
-      });
+    if (mounted) setState(() => _loading = false);
+  }
+
+  /// --- HTML parsing ---
+  void _parseHtml(String body) {
+    final document = html_parser.parse(body);
+    document
+        .querySelectorAll('script, style, noscript')
+        .forEach((e) => e.remove());
+
+    _ipa = document.querySelector('#pronWR')?.text.trim();
+
+    if (widget.showAudio) {
+      _audio = _extractAudioFiles(body);
+      _preparePlayer().catchError((_) {});
+    }
+
+    dom.Element? content =
+        document.querySelector('#articleWRD') ?? _fallbackSelector(document);
+
+    if (content == null) return;
+
+    final unescape = HtmlUnescape();
+    final tables = content.querySelectorAll('table');
+
+    for (final table in tables) {
+      if (!(table.attributes['class'] ?? '').toLowerCase().contains('wrd'))
+        continue;
+      _parseTableRows(table, unescape);
+    }
+
+    if (_senses.isEmpty) {
+      _error = 'No definition found for "${widget.word}" on WordReference.';
     }
   }
 
+  dom.Element? _fallbackSelector(dom.Document doc) {
+    final selectors = ['#article', '#content', '.entry', '.WRD', '#centerCol'];
+    for (final sel in selectors) {
+      final el = doc.querySelector(sel);
+      if (el != null) return el;
+    }
+    return null;
+  }
+
+  void _parseTableRows(dom.Element table, HtmlUnescape unescape) {
+    for (final tr in table.querySelectorAll('tr')) {
+      if (tr.querySelectorAll('th').isNotEmpty) continue; // skip headers
+
+      final frTd = tr.querySelector('td.FrWrd');
+      final toTd = tr.querySelector('td.ToWrd');
+      final frExTd = tr.querySelector("td.FrEx");
+      final toExTd = tr.querySelector("td.ToEx");
+
+      if (frTd != null || toTd != null) {
+        final french = frTd?.text.trim() ?? '';
+        final translation = toTd?.text.trim() ?? '';
+        final combined = (french + ' ' + translation).toLowerCase();
+
+        if (french.isEmpty ||
+            combined.contains('principales traductions') ||
+            combined.contains('français-anglais')) continue;
+
+        final sense = _Sense(
+          french: unescape.convert(french),
+          translation: unescape.convert(translation),
+        );
+
+        _attachExamples(sense, frExTd, toExTd, unescape);
+        _senses.add(sense);
+      } else if ((frExTd != null || toExTd != null) && _senses.isNotEmpty) {
+        _attachExamples(_senses.last, frExTd, toExTd, unescape);
+      }
+    }
+
+    // Deduplicate examples
+    for (final s in _senses) {
+      s.frExamples
+          .replaceRange(0, s.frExamples.length, s.frExamples.toSet().toList());
+      s.enExamples
+          .replaceRange(0, s.enExamples.length, s.enExamples.toSet().toList());
+    }
+  }
+
+  void _attachExamples(_Sense sense, dom.Element? frExTd, dom.Element? toExTd,
+      HtmlUnescape unescape) {
+    if (frExTd != null) {
+      final fe = frExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (fe.isNotEmpty) sense.frExamples.add(unescape.convert(fe));
+    }
+    if (toExTd != null) {
+      final te = toExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (te.isNotEmpty) sense.enExamples.add(unescape.convert(te));
+    }
+  }
+
+  /// --- UI ---
   @override
   Widget build(BuildContext context) {
     final surface = Theme.of(context).colorScheme.surface;
@@ -298,33 +256,14 @@ class _DefinitionPageState extends State<DefinitionPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _buildError()
-              : SafeArea(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                      decoration: BoxDecoration(
-                        color: surface,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x11000000),
-                            blurRadius: 12,
-                            offset: Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: _buildContentCard(),
-                    ),
-                  ),
-                ),
+              : _buildContent(surface),
     );
   }
 
   Widget _buildError() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -338,7 +277,28 @@ class _DefinitionPageState extends State<DefinitionPage> {
     );
   }
 
-  // The stylized card content with audio bar
+  Widget _buildContent(Color surface) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x11000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6))
+            ],
+          ),
+          child: _buildContentCard(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildContentCard() {
     final titleStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w800,
@@ -349,19 +309,14 @@ class _DefinitionPageState extends State<DefinitionPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Big word title
         Text(widget.word, style: titleStyle),
         const SizedBox(height: 10),
-        // "French to English" badge
         const _Badge(label: 'French to English'),
         const SizedBox(height: 12),
-
-        // Audio bar (if audio available and enabled)
         if (widget.showAudio && _audio.isNotEmpty) ...[
           _buildAudioBar(),
           const SizedBox(height: 12),
         ],
-
         if (_senses.isNotEmpty)
           ListView.separated(
             physics: const NeverScrollableScrollPhysics(),
@@ -387,7 +342,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        // Play
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: Colors.black12),
@@ -404,8 +358,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
           icon: const Icon(Icons.volume_up_rounded),
           label: const Text('ÉCOUTER:'),
         ),
-
-        // Accent dropdown
         SizedBox(
           width: 180,
           child: InputDecorator(
@@ -419,42 +371,29 @@ class _DefinitionPageState extends State<DefinitionPage> {
             child: DropdownButtonHideUnderline(
               child: DropdownButton<_AudioDropdownValue>(
                 hint: Text(
-                  '${_audio[_accentIndex].label.toUpperCase()} • ${(_speed * 100).toInt()}%',
-                ),
-                value: null, // important: allows mixed selection
+                    '${_audio[_accentIndex].label.toUpperCase()} • ${(_speed * 100).toInt()}%'),
+                value: null,
                 items: [
-                  // 🎧 Accent items
-                  ...List.generate(
-                    _audio.length,
-                    (i) => DropdownMenuItem<_AudioDropdownValue>(
+                  ...List.generate(_audio.length, (i) {
+                    return DropdownMenuItem<_AudioDropdownValue>(
                       value: _AudioDropdownValue.accent(i),
                       child: Text(_audio[i].label.toUpperCase()),
-                    ),
-                  ),
-
-                  // 🔽 Divider
-                  const DropdownMenuItem<_AudioDropdownValue>(
-                    enabled: false,
-                    child: Divider(thickness: 1),
-                  ),
-
-                  // ⚡ Speed items
+                    );
+                  }),
                   const DropdownMenuItem(
-                    value: _AudioDropdownValue.speed(1.0),
-                    child: Text('100%'),
-                  ),
+                      enabled: false, child: Divider(thickness: 1)),
                   const DropdownMenuItem(
-                    value: _AudioDropdownValue.speed(0.75),
-                    child: Text('75%'),
-                  ),
+                      value: _AudioDropdownValue.speed(1.0),
+                      child: Text('100%')),
                   const DropdownMenuItem(
-                    value: _AudioDropdownValue.speed(0.5),
-                    child: Text('50%'),
-                  ),
+                      value: _AudioDropdownValue.speed(0.75),
+                      child: Text('75%')),
+                  const DropdownMenuItem(
+                      value: _AudioDropdownValue.speed(0.5),
+                      child: Text('50%')),
                 ],
                 onChanged: (val) async {
                   if (val == null) return;
-
                   if (val.isAccent) {
                     setState(() => _accentIndex = val.accentIndex!);
                     await _preparePlayer();
@@ -462,28 +401,23 @@ class _DefinitionPageState extends State<DefinitionPage> {
                     setState(() => _speed = val.speed!);
                     await _player.setSpeed(_speed);
                   }
-
                   await _saveAudioPref();
                 },
               ),
             ),
           ),
         ),
-
-        // IPA, if present
         if (_ipa != null && _ipa!.isNotEmpty)
-          Text(
-            _ipa!,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
+          Text(_ipa!, style: Theme.of(context).textTheme.bodyLarge),
       ],
     );
   }
 }
 
-// Small pill badge
+/// --- Badge Widget ---
 class _Badge extends StatelessWidget {
   final String label;
+
   const _Badge({required this.label});
 
   @override
@@ -496,19 +430,17 @@ class _Badge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withOpacity(0.6)),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-            ),
-      ),
+      child: Text(label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              )),
     );
   }
 }
 
-// One sense row (number + lemma + arrow + translation + examples)
+/// --- Sense row widget ---
 class _SenseTile extends StatelessWidget {
   final int index;
   final _Sense sense;
@@ -519,29 +451,23 @@ class _SenseTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = Theme.of(context).textTheme.bodyLarge;
     final posStyle = base?.copyWith(
-      fontSize: (base?.fontSize ?? 16) - 2,
-      color: Colors.grey.shade700,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.2,
-    );
-
+        fontSize: (base?.fontSize ?? 16) - 2,
+        color: Colors.grey.shade700,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.2);
     final arrowStyle = base?.copyWith(
-      color: Colors.grey.shade700,
-      fontWeight: FontWeight.w600,
-    );
+        color: Colors.grey.shade700, fontWeight: FontWeight.w600);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header line: "1. savon nm → soap n"
         RichText(
           text: TextSpan(
             style: base?.copyWith(color: Colors.black87),
             children: [
               TextSpan(
-                text: '${index + 1}. ',
-                style: base?.copyWith(fontWeight: FontWeight.w600),
-              ),
+                  text: '${index + 1}. ',
+                  style: base?.copyWith(fontWeight: FontWeight.w600)),
               ..._formatTermSpans(sense.french,
                   isLemma: true, base: base, pos: posStyle),
               TextSpan(text: '  →  ', style: arrowStyle),
@@ -550,58 +476,44 @@ class _SenseTile extends StatelessWidget {
             ],
           ),
         ),
-        // French examples (regular)
-        if (sense.frExamples.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          ...sense.frExamples.take(1).map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(left: 24.0, bottom: 2),
-                  child: Text(e, style: Theme.of(context).textTheme.bodyMedium),
-                ),
-              ),
-        ],
-        // English examples (italic, lighter)
-        if (sense.enExamples.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          ...sense.enExamples.take(1).map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(left: 24.0, bottom: 2),
-                  child: Text(
-                    e,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontStyle: FontStyle.italic,
-                          color: Colors.black.withOpacity(0.7),
-                        ),
-                  ),
-                ),
-              ),
-        ],
+        ..._buildExamples(sense.frExamples, context),
+        ..._buildExamples(sense.enExamples, context, italic: true),
       ],
     );
   }
 
-  // Splits a term like "savon nm" or "haul [sb] over the coals v expr"
-  // into styled spans: lemma (bold), POS (small), rest (regular).
-  static List<InlineSpan> _formatTermSpans(
-    String raw, {
-    required bool isLemma,
-    TextStyle? base,
-    TextStyle? pos,
-  }) {
+  List<Widget> _buildExamples(List<String> examples, BuildContext context,
+      {bool italic = false}) {
+    if (examples.isEmpty) return [];
+    return [
+      const SizedBox(height: 6),
+      Padding(
+        padding: const EdgeInsets.only(left: 24.0, bottom: 2),
+        child: Text(
+          examples.first,
+          style: italic
+              ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: Colors.black.withOpacity(0.7))
+              : Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
+    ];
+  }
+
+  static List<InlineSpan> _formatTermSpans(String raw,
+      {required bool isLemma, TextStyle? base, TextStyle? pos}) {
     final spans = <InlineSpan>[];
-
     final posPattern = RegExp(
-      r'\b(loc v|loc adv|loc adj|vi|vt|nm|nf|n|adj|adv|expr|prep|pron|conj|interj)\b',
-      caseSensitive: false,
-    );
-
+        r'\b(loc v|loc adv|loc adj|vi|vt|nm|nf|n|adj|adv|expr|prep|pron|conj|interj)\b',
+        caseSensitive: false);
     final match = posPattern.firstMatch(raw);
+
     if (match == null) {
       spans.add(TextSpan(
-        text: raw,
-        style: base?.copyWith(
-            fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600),
-      ));
+          text: raw,
+          style: base?.copyWith(
+              fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600)));
       return spans;
     }
 
@@ -609,17 +521,13 @@ class _SenseTile extends StatelessWidget {
     final posToken = match.group(0)!;
     final after = raw.substring(match.end).trimLeft();
 
-    if (before.isNotEmpty) {
+    if (before.isNotEmpty)
       spans.add(TextSpan(
-        text: before,
-        style: base?.copyWith(
-            fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600),
-      ));
-    }
+          text: before,
+          style: base?.copyWith(
+              fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600)));
     spans.add(TextSpan(text: ' ${posToken.toLowerCase()}', style: pos));
-    if (after.isNotEmpty) {
-      spans.add(TextSpan(text: ' $after', style: base));
-    }
+    if (after.isNotEmpty) spans.add(TextSpan(text: ' $after', style: base));
     return spans;
   }
 }
