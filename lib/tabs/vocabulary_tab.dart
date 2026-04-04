@@ -9,71 +9,33 @@ class VocabularyTab extends StatefulWidget {
 }
 
 class _VocabularyTabState extends State<VocabularyTab> {
-  final List<Map<String, String>> _words = [];
-
-  /// Reference to Firestore collection
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
+  final GlobalKey<ScaffoldMessengerState> _scaffoldKey =
+      GlobalKey<ScaffoldMessengerState>();
 
-  @override
-  void initState() {
-    super.initState();
-    _loadWords();
-  }
-
-  /// Load user's words from Firestore
-  Future<void> _loadWords() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    final snapshot = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('vocabulary')
-        .get();
-
-    setState(() {
-      _words.clear();
-      _words.addAll(snapshot.docs.map((doc) => {
-            'id': doc.id,
-            'word': doc['word'] ?? '',
-            'translation': doc['translation'] ?? '',
-            'context': doc['context'] ?? '',
-          }));
-    });
-  }
-
-  /// Show dialog to add a new word
   void _showAddWordDialog() {
     final wordController = TextEditingController();
     final translationController = TextEditingController();
     final contextController = TextEditingController();
 
-    // Capture the parent context
-    final parentContext = context;
-
     Future<void> addWord() async {
       final word = wordController.text.trim();
       final translation = translationController.text.trim();
       final contextText = contextController.text.trim();
+      final user = _auth.currentUser;
 
       if (word.isEmpty) {
-        ScaffoldMessenger.of(parentContext)
+        ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Please enter a word')));
         return;
       }
-
-      final user = _auth.currentUser;
-      if (user == null) {
-        ScaffoldMessenger.of(parentContext)
-            .showSnackBar(SnackBar(content: Text('User not signed in')));
-        return;
-      }
+      if (user == null) return;
 
       try {
         final docRef = await _firestore
             .collection('users')
-            .doc(user.uid)
+            .doc(user?.uid ?? 'unknown')
             .collection('vocabulary')
             .add({
           'word': word,
@@ -84,51 +46,77 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
         if (!mounted) return;
 
-        setState(() {
-          _words.insert(0, {
-            'id': docRef.id,
-            'word': word,
-            'translation': translation,
-            'context': contextText,
-          });
-        });
-
-        // Close dialog first
-        Navigator.of(parentContext).pop();
-
-        // Then show snack bar using the parent context
-        ScaffoldMessenger.of(parentContext)
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Word added')));
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(parentContext)
+        ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Failed to add word: $e')));
       }
     }
 
     showDialog(
       context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        // Use dialogContext only for building UI, not ScaffoldMessenger
+      builder: (context) {
         return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(20.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('Add New Word',
-                    style: Theme.of(context).textTheme.titleLarge),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                SizedBox(height: 12),
                 TextField(
-                    controller: wordController,
-                    decoration: InputDecoration(hintText: 'Word')),
+                  controller: wordController,
+                  decoration: InputDecoration(
+                      hintText: 'Word',
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                ),
+                SizedBox(height: 8),
                 TextField(
-                    controller: translationController,
-                    decoration: InputDecoration(hintText: 'Translation')),
+                  controller: translationController,
+                  decoration: InputDecoration(
+                      hintText: 'Translation',
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                ),
+                SizedBox(height: 8),
                 TextField(
-                    controller: contextController,
-                    decoration: InputDecoration(hintText: 'Context')),
-                ElevatedButton(onPressed: addWord, child: Text('Add Word')),
+                  controller: contextController,
+                  decoration: InputDecoration(
+                      hintText: 'Context',
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                ),
+                SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: addWord,
+                  icon: Icon(Icons.add),
+                  label: Text(
+                    'Add Word',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: Colors.deepPurple,
+                  ),
+                )
               ],
             ),
           ),
@@ -139,28 +127,41 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
   @override
   Widget build(BuildContext context) {
+    final user = _auth.currentUser;
+
     return Scaffold(
-      appBar: AppBar(title: Text('My Vocabulary')),
+      key: _scaffoldKey,
+      appBar: AppBar(
+        title: Text('My Vocabulary'),
+        backgroundColor: Colors.deepPurple,
+      ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore
-            .collection('users')
-            .doc(_auth.currentUser?.uid)
-            .collection('vocabulary')
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
+        stream: user != null
+            ? _firestore
+                .collection('users')
+                .doc(user.uid)
+                .collection('vocabulary')
+                .orderBy('createdAt', descending: true)
+                .snapshots()
+            : null,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+            return Center(
+                child: CircularProgressIndicator(
+              color: Colors.deepPurple,
+            ));
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(child: Text('No words yet. Tap + to add one.'));
+            return Center(
+                child: Text('No words yet. Tap + to add one.',
+                    style: TextStyle(fontSize: 16, color: Colors.grey[700])));
           }
 
           final docs = snapshot.data!.docs;
 
           return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            padding: const EdgeInsets.all(16),
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final doc = docs[index];
@@ -169,55 +170,53 @@ class _VocabularyTabState extends State<VocabularyTab> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => DefinitionPage(word: item['word'] ?? ''),
-                    ),
-                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) =>
+                          DefinitionPage(word: item['word'] ?? ''))),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.green[800],
-                      borderRadius: BorderRadius.circular(12),
+                      gradient: LinearGradient(
+                        colors: [Colors.deepPurple, Colors.purpleAccent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2))
+                          color: Colors.black26,
+                          blurRadius: 6,
+                          offset: Offset(0, 4),
+                        )
                       ],
                     ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                        horizontal: 16, vertical: 14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: Text(
-                                  '${item['word'] ?? ''} - ${item['translation'] ?? ''}',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white)),
+                                '${item['word'] ?? ''} - ${item['translation'] ?? ''}',
+                                style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white),
+                              ),
                             ),
                             IconButton(
                               icon: Icon(Icons.delete, color: Colors.redAccent),
                               onPressed: () async {
-                                final user = _auth.currentUser;
-                                if (user == null) return;
-
                                 try {
                                   await _firestore
                                       .collection('users')
-                                      .doc(user.uid)
+                                      .doc(user?.uid ?? 'unknown')
                                       .collection('vocabulary')
                                       .doc(doc.id)
                                       .delete();
-
-                                  if (!mounted)
-                                    return; // добавлено для безопасности
+                                  if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('Word deleted')));
                                 } catch (e) {
@@ -231,9 +230,13 @@ class _VocabularyTabState extends State<VocabularyTab> {
                             ),
                           ],
                         ),
-                        SizedBox(height: 6),
-                        Text(item['context'] ?? '',
-                            style: TextStyle(color: Colors.white70)),
+                        if ((item['context'] ?? '').isNotEmpty)
+                          SizedBox(height: 6),
+                        if ((item['context'] ?? '').isNotEmpty)
+                          Text(
+                            item['context'] ?? '',
+                            style: TextStyle(color: Colors.white70),
+                          ),
                       ],
                     ),
                   ),
@@ -243,24 +246,25 @@ class _VocabularyTabState extends State<VocabularyTab> {
           );
         },
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _showAddWordDialog,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text('Add New Word',
-                  style: TextStyle(color: Colors.white, fontSize: 16)),
-            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddWordDialog,
+        label: Text(
+          "Add a New Word",
+          style: TextStyle(
+            color: Colors.white, // White text
+            fontSize: 16, // Bigger font
+            fontWeight: FontWeight.bold,
           ),
         ),
+        icon: Icon(Icons.add, color: Colors.white), // Optional icon
+        backgroundColor: Colors.deepPurple, // Button color
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16), // Rounded corners
+        ),
+        extendedPadding:
+            EdgeInsets.symmetric(horizontal: 24, vertical: 16), // Larger size
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }

@@ -6,18 +6,15 @@ import 'tabs/profile_tab.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-import 'package:flutter/widgets.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
   runApp(VocabApp());
 }
 
@@ -26,11 +23,32 @@ class VocabApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Vocab App',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor:
-            const Color.fromARGB(255, 167, 86, 86), // light grey background for the whole app
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.grey[100],
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.deepPurple,
+          foregroundColor: Colors.white,
+          elevation: 4,
+          centerTitle: true,
+        ),
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Colors.white,
+          selectedItemColor: Colors.deepPurple,
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          elevation: 10,
+          type: BottomNavigationBarType.fixed,
+        ),
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          backgroundColor: Colors.deepPurple,
+          elevation: 6,
+        ),
       ),
       home: AuthGate(),
     );
@@ -45,7 +63,11 @@ class AuthGate extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(
+              child: CircularProgressIndicator(
+                color: Colors.deepPurple,
+              ),
+            ),
           );
         }
 
@@ -77,17 +99,36 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Each page provides its own AppBar / FAB when needed.
       body: IndexedStack(index: _currentIndex, children: _pages),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Vocabulary'),
-          BottomNavigationBarItem(icon: Icon(Icons.school), label: 'Training'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (i) => setState(() => _currentIndex = i),
+          items: [
+            BottomNavigationBarItem(
+                icon: Icon(Icons.book), label: 'Vocabulary'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.school), label: 'Training'),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          ],
+        ),
       ),
+      floatingActionButton: _currentIndex == 1
+          ? FloatingActionButton(
+              onPressed: () {
+                // Example: Start a new training session
+              },
+              child: Icon(Icons.play_arrow),
+            )
+          : null,
     );
   }
 }
