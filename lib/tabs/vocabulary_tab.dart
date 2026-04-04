@@ -166,6 +166,161 @@ class _VocabularyTabState extends State<VocabularyTab> {
     }
   }
 
+  void _showEditWordDialog(String docId, Map<String, dynamic> existingData) {
+    final wordController = TextEditingController(text: existingData['word']);
+    final translationController =
+        TextEditingController(text: existingData['translation']);
+    final contextController =
+        TextEditingController(text: existingData['context']);
+
+    Future<void> updateWord() async {
+      final word = wordController.text.trim();
+      final translation = translationController.text.trim();
+      final contextText = contextController.text.trim();
+      final user = _auth.currentUser;
+
+      if (word.isEmpty) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Please enter a word')));
+        return;
+      }
+      if (user == null) return;
+
+      try {
+        await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('vocabulary')
+            .doc(docId)
+            .update({
+          'word': word,
+          'translation': translation,
+          'context': contextText,
+        });
+
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Word updated')));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to update word: $e')));
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Edit Word',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                SizedBox(height: 12),
+                TextField(
+                  controller: wordController,
+                  decoration: InputDecoration(
+                      hintText: 'Word',
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                ),
+                SizedBox(height: 8),
+                TextField(
+                  controller: translationController,
+                  decoration: InputDecoration(
+                      hintText: 'Translation',
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                ),
+                SizedBox(height: 8),
+                TextField(
+                  controller: contextController,
+                  decoration: InputDecoration(
+                      hintText: 'Context',
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                ),
+                SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: updateWord,
+                  icon: Icon(Icons.edit),
+                  label: Text(
+                    'Update Word',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: Colors.deepPurple,
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+// 1️⃣ Add this method inside _VocabularyTabState
+  void _showLookupDialog() {
+    final lookupController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Look up a word'),
+          content: TextField(
+            controller: lookupController,
+            decoration: InputDecoration(
+              hintText: 'Enter word',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final word = lookupController.text.trim();
+                if (word.isNotEmpty) {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DefinitionPage(word: word),
+                    ),
+                  );
+                }
+              },
+              child: Text('Look Up'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   @override
   Widget build(BuildContext context) {
     final user = _auth.currentUser;
@@ -173,109 +328,159 @@ class _VocabularyTabState extends State<VocabularyTab> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text('My Vocabulary'),
         backgroundColor: Colors.deepPurple,
+        title: TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search your words...',
+            border: InputBorder.none,
+            hintStyle: TextStyle(color: Colors.white70),
+            prefixIcon: Icon(Icons.search, color: Colors.white),
+          ),
+          style: TextStyle(color: Colors.white),
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value.trim().toLowerCase();
+            });
+          },
+        ),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: user != null
-            ? _firestore
-                .collection('users')
-                .doc(user.uid)
-                .collection('vocabulary')
-                .orderBy('createdAt', descending: true)
-                .snapshots()
-            : null,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-                child: CircularProgressIndicator(
-              color: Colors.deepPurple,
-            ));
-          }
+      body: Stack(
+        children: [
+          StreamBuilder<QuerySnapshot>(
+            stream: user != null
+                ? _firestore
+                    .collection('users')
+                    .doc(user.uid)
+                    .collection('vocabulary')
+                    .orderBy('createdAt', descending: true)
+                    .snapshots()
+                : null,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(
+                    child: CircularProgressIndicator(
+                  color: Colors.deepPurple,
+                ));
+              }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-                child: Text('No words yet. Tap + to add one.',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[700])));
-          }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return Center(
+                    child: Text('No words yet. Tap + to add one.',
+                        style:
+                            TextStyle(fontSize: 16, color: Colors.grey[700])));
+              }
 
-          final docs = snapshot.data!.docs;
+              final docs = snapshot.data!.docs.where((doc) {
+                final item = doc.data() as Map<String, dynamic>;
+                final word = (item['word'] ?? '').toString().toLowerCase();
+                final translation =
+                    (item['translation'] ?? '').toString().toLowerCase();
+                return word.contains(_searchQuery) ||
+                    translation.contains(_searchQuery);
+              }).toList();
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final doc = docs[index];
-              final item = doc.data() as Map<String, dynamic>;
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final doc = docs[index];
+                  final item = doc.data() as Map<String, dynamic>;
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) =>
-                          DefinitionPage(word: item['word'] ?? ''))),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.deepPurple, Colors.purpleAccent],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 6,
-                          offset: Offset(0, 4),
-                        )
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${item['word'] ?? ''} - ${item['translation'] ?? ''}',
-                                style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white),
-                              ),
-                            ),
-                            // 🔥 Improved Delete Button
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.redAccent.withOpacity(0.2),
-                              ),
-                              child: IconButton(
-                                icon:
-                                    Icon(Icons.close, color: Colors.redAccent),
-                                onPressed: () => _deleteWord(doc.id),
-                              ),
-                            ),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) =>
+                              DefinitionPage(word: item['word'] ?? ''))),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.deepPurple, Colors.purpleAccent],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 6,
+                              offset: Offset(0, 4),
+                            )
                           ],
                         ),
-                        if ((item['context'] ?? '').isNotEmpty)
-                          SizedBox(height: 6),
-                        if ((item['context'] ?? '').isNotEmpty)
-                          Text(
-                            item['context'] ?? '',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                      ],
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${item['word'] ?? ''} - ${item['translation'] ?? ''}',
+                                    style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
+                                  ),
+                                ),
+                                // Edit Button
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white24,
+                                  ),
+                                  child: IconButton(
+                                    icon: Icon(Icons.edit, color: Colors.white),
+                                    onPressed: () =>
+                                        _showEditWordDialog(doc.id, item),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                // Delete Button
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.redAccent.withOpacity(0.2),
+                                  ),
+                                  child: IconButton(
+                                    icon: Icon(Icons.close,
+                                        color: Colors.redAccent),
+                                    onPressed: () => _deleteWord(doc.id),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if ((item['context'] ?? '').isNotEmpty)
+                              SizedBox(height: 6),
+                            if ((item['context'] ?? '').isNotEmpty)
+                              Text(
+                                item['context'] ?? '',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
-          );
-        },
+          ),
+          // 🔍 Magnifying glass at top-right
+          Positioned(
+            bottom: 16, // distance from bottom
+            right: 16, // distance from right
+            child: FloatingActionButton(
+              heroTag: 'lookupWord',
+              backgroundColor: Colors.deepPurple,
+              onPressed: _showLookupDialog,
+              child: Icon(Icons.search, color: Colors.white),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddWordDialog,

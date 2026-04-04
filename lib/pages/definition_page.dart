@@ -6,6 +6,8 @@ import 'package:html_unescape/html_unescape.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:html/dom.dart' as dom;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DefinitionPage extends StatefulWidget {
   final String word;
@@ -70,6 +72,36 @@ class _DefinitionPageState extends State<DefinitionPage> {
   void dispose() {
     _player.dispose();
     super.dispose();
+  }
+
+  Future<void> _addWordToVocabulary() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('vocabulary')
+          .add({
+        'word': widget.word,
+        'translation': _senses.isNotEmpty ? _senses.first.translation : '',
+        'context': _senses.isNotEmpty && _senses.first.frExamples.isNotEmpty
+            ? _senses.first.frExamples.first
+            : '',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Word "${widget.word}" added to vocabulary')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add word: $e')),
+      );
+    }
   }
 
   /// --- Audio Preferences ---
@@ -189,6 +221,46 @@ class _DefinitionPageState extends State<DefinitionPage> {
     return null;
   }
 
+  void _showLookupDialog() {
+    final lookupController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Look up a word'),
+          content: TextField(
+            controller: lookupController,
+            decoration: InputDecoration(
+              hintText: 'Enter word',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final word = lookupController.text.trim();
+                if (word.isNotEmpty) {
+                  Navigator.pop(context);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DefinitionPage(word: word),
+                    ),
+                  );
+                }
+              },
+              child: Text('Look Up'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _parseTableRows(dom.Element table, HtmlUnescape unescape) {
     for (final tr in table.querySelectorAll('tr')) {
       if (tr.querySelectorAll('th').isNotEmpty) continue; // skip headers
@@ -202,6 +274,9 @@ class _DefinitionPageState extends State<DefinitionPage> {
         final french = frTd?.text.trim() ?? '';
         final translation = toTd?.text.trim() ?? '';
         final combined = (french + ' ' + translation).toLowerCase();
+
+        // --- Skip header row "Français → Anglais" ---
+        if (french == 'Français' && translation == 'Anglais') continue;
 
         if (french.isEmpty ||
             combined.contains('principales traductions') ||
@@ -257,6 +332,13 @@ class _DefinitionPageState extends State<DefinitionPage> {
           : _error != null
               ? _buildError()
               : _buildContent(surface),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'lookupWord',
+        backgroundColor: Colors.deepPurple,
+        onPressed: _showLookupDialog,
+        child: Icon(Icons.search, color: Colors.white),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -312,6 +394,23 @@ class _DefinitionPageState extends State<DefinitionPage> {
         Text(widget.word, style: titleStyle),
         const SizedBox(height: 10),
         const _Badge(label: 'French to English'),
+        const SizedBox(height: 12),
+        ElevatedButton.icon(
+          onPressed: _addWordToVocabulary,
+          icon: Icon(Icons.add, color: Colors.white),
+          label: Text(
+            'Add to Vocabulary',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.deepPurple,
+            minimumSize: Size(double.infinity, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         const SizedBox(height: 12),
         if (widget.showAudio && _audio.isNotEmpty) ...[
           _buildAudioBar(),
