@@ -1,15 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' show Platform;
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'register_page.dart';
 
 /// Login page supporting email/password sign-in and Google sign-in.
 class LoginPage extends StatefulWidget {
   @override
   State<LoginPage> createState() => _LoginPageState();
+}
+
+// AuthService singleton for Google sign-in
+class AuthService {
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  User? get currentUser => _auth.currentUser;
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  // Sign in with Google (Web + Mobile)
+  Future<User?> signInWithGoogle(BuildContext context) async {
+    try {
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        await _auth.signInWithPopup(provider);
+        return _auth.currentUser;
+      } else {
+        final provider = GoogleAuthProvider();
+        final userCredential = await _auth.signInWithProvider(provider);
+        return userCredential.user;
+      }
+    } on FirebaseAuthException catch (e) {
+      final msg = 'Google Sign-In error: ${e.message}';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return null;
+    } catch (e) {
+      final msg = 'Unexpected error: $e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return null;
+    }
+  }
+
+  Future<void> signOut() async {
+    await _auth.signOut();
+  }
 }
 
 class _LoginPageState extends State<LoginPage> {
@@ -28,10 +64,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _signIn() async {
-    setState(() {
-      _error = null;
-    });
-
+    setState(() => _error = null);
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
@@ -40,7 +73,6 @@ class _LoginPageState extends State<LoginPage> {
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      // userChanges() in AuthGate will react and navigate automatically
     } on FirebaseAuthException catch (e) {
       setState(() {
         _error = e.message ?? 'Authentication failed';
@@ -54,47 +86,17 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _signInWithGoogle() async {
     setState(() {
-      _error = null;
       _loading = true;
+      _error = null;
     });
 
-    try {
-      if (kIsWeb) {
-        final provider = GoogleAuthProvider();
-        await FirebaseAuth.instance.signInWithPopup(provider);
-        return;
-      }
-
-      // Initialize the sign-in plugin
-      await GoogleSignIn.instance.initialize();
-
-      // Launch Google account selector
-      final account = await GoogleSignIn.instance.authenticate();
-      if (account == null) return; // user cancelled
-
-      // Get ID token
-      final googleAuth = await account.authentication;
-      final idToken = googleAuth.idToken;
-      if (idToken == null) {
-        throw Exception('Failed to get Google ID token');
-      }
-
-      // Create credential for Firebase
-      final credential = GoogleAuthProvider.credential(idToken: idToken);
-
-      // Sign in to Firebase
-      await FirebaseAuth.instance.signInWithCredential(credential);
-    } on FirebaseAuthException catch (e) {
-      setState(() => _error = e.message ?? 'Google sign-in failed');
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message ?? 'Google sign-in failed')));
-    } catch (e) {
-      final msg = 'Google Sign-In error: $e';
-      setState(() => _error = msg);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    final user = await AuthService().signInWithGoogle(context);
+    if (user != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Signed in as ${user.email}')));
     }
+
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _showForgotPasswordDialog() async {
@@ -110,8 +112,9 @@ class _LoginPageState extends State<LoginPage> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel')),
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
+          ),
           TextButton(
             onPressed: () async {
               final email = emailCtrl.text.trim();
@@ -200,7 +203,10 @@ class _LoginPageState extends State<LoginPage> {
                                   height: 20,
                                   width: 20,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white))
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
                               : Text('Sign in'),
                         ),
                       ),
