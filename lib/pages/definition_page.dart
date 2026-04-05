@@ -25,6 +25,8 @@ class DefinitionPage extends StatefulWidget {
   State<DefinitionPage> createState() => _DefinitionPageState();
 }
 
+String _listenLabel = 'ÉCOUTER:';
+
 /// --- Audio dropdown model ---
 class _AudioDropdownValue {
   final int? accentIndex;
@@ -186,13 +188,24 @@ class _DefinitionPageState extends State<DefinitionPage> {
     if (mounted) setState(() => _loading = false);
   }
 
+  void _detectListenLabel(dom.Document document) {
+    final listenSpan = document.querySelector('#listen_txt')?.text.trim() ?? '';
+    if (listenSpan.toLowerCase().startsWith('listen')) {
+      _listenLabel = 'LISTEN:';
+    } else if (listenSpan.toLowerCase().startsWith('ecouter')) {
+      _listenLabel = 'ÉCOUTER:';
+    } else {
+      _listenLabel = 'ÉCOUTER:'; // fallback
+    }
+  }
+
   /// --- HTML parsing ---
   void _parseHtml(String body) {
     final document = html_parser.parse(body);
     document
         .querySelectorAll('script, style, noscript')
         .forEach((e) => e.remove());
-
+    _detectListenLabel(document);
     _ipa = document.querySelector('#pronWR')?.text.trim();
 
     if (widget.showAudio) {
@@ -494,7 +507,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
             } catch (_) {}
           },
           icon: const Icon(Icons.volume_up_rounded),
-          label: const Text('ÉCOUTER:'),
+          label: Text(_listenLabel), // <-- use dynamic label here
         ),
         SizedBox(
           width: 180,
