@@ -299,9 +299,34 @@ class _VocabularyTabState extends State<VocabularyTab> {
               child: Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final word = lookupController.text.trim();
                 if (word.isNotEmpty) {
+                  final user = _auth.currentUser;
+                  if (user != null) {
+                    final historyRef = _firestore
+                        .collection('users')
+                        .doc(user.uid)
+                        .collection('history');
+
+                    // Add word with timestamp
+                    await historyRef.add({
+                      'word': word,
+                      'lookedUpAt': FieldValue.serverTimestamp(),
+                    });
+
+                    // Keep only last 100 words
+                    final snapshot = await historyRef
+                        .orderBy('lookedUpAt', descending: true)
+                        .get();
+
+                    if (snapshot.docs.length > 100) {
+                      for (var doc in snapshot.docs.skip(100)) {
+                        await historyRef.doc(doc.id).delete();
+                      }
+                    }
+                  }
+
                   Navigator.pop(context);
                   Navigator.push(
                     context,

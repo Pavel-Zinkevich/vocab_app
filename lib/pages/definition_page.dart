@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
@@ -8,13 +7,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DefinitionPage extends StatefulWidget {
   final String word;
   final bool showAudio;
+  final String? wordUrl; // <-- add this
 
-  const DefinitionPage({Key? key, required this.word, this.showAudio = true})
-      : super(key: key);
+  const DefinitionPage({
+    Key? key,
+    required this.word,
+    this.showAudio = true,
+    this.wordUrl, // <-- add this
+  }) : super(key: key);
 
   @override
   State<DefinitionPage> createState() => _DefinitionPageState();
@@ -160,7 +165,9 @@ class _DefinitionPageState extends State<DefinitionPage> {
     });
 
     final wordEsc = Uri.encodeComponent(widget.word.trim());
-    final url = Uri.parse('https://www.wordreference.com/fren/$wordEsc');
+    final url = widget.wordUrl != null
+        ? Uri.parse(widget.wordUrl!)
+        : Uri.parse('https://www.wordreference.com/enfr/$wordEsc');
 
     try {
       final resp = await http.get(url).timeout(const Duration(seconds: 12));
@@ -261,9 +268,30 @@ class _DefinitionPageState extends State<DefinitionPage> {
     );
   }
 
+  String get _badgeLabel {
+    final url = widget.wordUrl ?? '';
+    if (url.contains('/enfr/')) return 'English → French';
+    if (url.contains('/fren/')) return 'French → English';
+    return 'Link to the site';
+  }
+
+  String get _badgeUrl {
+    return widget.wordUrl ??
+        'https://www.wordreference.com/enfr/${widget.word}';
+  }
+
   void _parseTableRows(dom.Element table, HtmlUnescape unescape) {
+    // Check if the first row is a language header
+    final firstRow = table.querySelector('tr.langHeader');
+    bool isHeaderRow(dom.Element tr) {
+      return tr.querySelectorAll('th').isNotEmpty ||
+          tr.classes.contains('langHeader') ||
+          (tr.text.toLowerCase().contains('principales traductions') ||
+              tr.text.toLowerCase().contains('français → anglais'));
+    }
+
     for (final tr in table.querySelectorAll('tr')) {
-      if (tr.querySelectorAll('th').isNotEmpty) continue; // skip headers
+      if (isHeaderRow(tr)) continue;
 
       final frTd = tr.querySelector('td.FrWrd');
       final toTd = tr.querySelector('td.ToWrd');
@@ -273,14 +301,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
       if (frTd != null || toTd != null) {
         final french = frTd?.text.trim() ?? '';
         final translation = toTd?.text.trim() ?? '';
-        final combined = (french + ' ' + translation).toLowerCase();
-
-        // --- Skip header row "Français → Anglais" ---
-        if (french == 'Français' && translation == 'Anglais') continue;
-
-        if (french.isEmpty ||
-            combined.contains('principales traductions') ||
-            combined.contains('français-anglais')) continue;
+        if (french.isEmpty || translation.isEmpty) continue;
 
         final sense = _Sense(
           french: unescape.convert(french),
@@ -391,31 +412,49 @@ class _DefinitionPageState extends State<DefinitionPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Word title
         Text(widget.word, style: titleStyle),
         const SizedBox(height: 10),
-        const _Badge(label: 'French to English'),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: _addWordToVocabulary,
-          icon: Icon(Icons.add, color: Colors.white),
-          label: Text(
-            'Add to Vocabulary',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurple,
-            minimumSize: Size(double.infinity, 48),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+
+        // Row with Badge + Add Word button
+        Row(
+          children: [
+            _Badge(
+              label: _badgeLabel,
+              url: _badgeUrl,
             ),
-          ),
+            const SizedBox(width: 12), // space between badge and button
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _addWordToVocabulary,
+                icon: Icon(Icons.add, color: Colors.white),
+                label: Text(
+                  'Add to Vocabulary',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  minimumSize: Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
-        const SizedBox(height: 12),
+
+        // Audio bar below
         if (widget.showAudio && _audio.isNotEmpty) ...[
           _buildAudioBar(),
           const SizedBox(height: 12),
         ],
+
+        // List of senses
         if (_senses.isNotEmpty)
           ListView.separated(
             physics: const NeverScrollableScrollPhysics(),
@@ -516,25 +555,36 @@ class _DefinitionPageState extends State<DefinitionPage> {
 /// --- Badge Widget ---
 class _Badge extends StatelessWidget {
   final String label;
+  final String? url;
 
-  const _Badge({required this.label});
+  const _Badge({required this.label, this.url});
 
   @override
   Widget build(BuildContext context) {
     const color = Color(0xFF5C7CF2);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.6)),
+
+    return GestureDetector(
+      onTap: url != null
+          ? () async {
+              if (await canLaunchUrl(Uri.parse(url!))) {
+                await launchUrl(Uri.parse(url!));
+              }
+            }
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.16),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withOpacity(0.6)),
+        ),
+        child: Text(label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                )),
       ),
-      child: Text(label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              )),
     );
   }
 }
