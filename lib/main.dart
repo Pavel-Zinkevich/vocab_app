@@ -99,36 +99,29 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _pages),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 10,
-            ),
-          ],
+        body: IndexedStack(index: _currentIndex, children: _pages),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (i) => setState(() => _currentIndex = i),
+            items: [
+              BottomNavigationBarItem(
+                  icon: Icon(Icons.book), label: 'Vocabulary'),
+              BottomNavigationBarItem(
+                  icon: Icon(Icons.school), label: 'Training'),
+              BottomNavigationBarItem(
+                  icon: Icon(Icons.person), label: 'Profile'),
+            ],
+          ),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          items: [
-            BottomNavigationBarItem(
-                icon: Icon(Icons.book), label: 'Vocabulary'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.school), label: 'Training'),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          ],
-        ),
-      ),
-      floatingActionButton: _currentIndex == 1
-          ? FloatingActionButton(
-              onPressed: () {
-                // Example: Start a new training session
-              },
-              child: Icon(Icons.play_arrow),
-            )
-          : null,
-    );
+        floatingActionButton: null);
   }
 }
