@@ -398,9 +398,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
               final docs = snapshot.data!.docs.where((doc) {
                 final item = doc.data() as Map<String, dynamic>;
+                final status = item['status'] ?? 'uncategorized';
                 final word = (item['word'] ?? '').toString().toLowerCase();
                 final translation =
                     (item['translation'] ?? '').toString().toLowerCase();
+
                 return word.contains(_searchQuery) ||
                     translation.contains(_searchQuery);
               }).toList();
@@ -412,6 +414,19 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   final doc = docs[index];
                   final item = doc.data() as Map<String, dynamic>;
 
+                  // 👈 Add it here
+                  Color bgColor;
+                  switch (item['status'] ?? 'uncategorized') {
+                    case 'known':
+                      bgColor = Colors.green;
+                      break;
+                    case 'unknown':
+                      bgColor = const Color.fromARGB(255, 194, 94, 87);
+                      break;
+                    default:
+                      bgColor = Colors.white;
+                  }
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: InkWell(
@@ -421,11 +436,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                               DefinitionPage(word: item['word'] ?? ''))),
                       child: Container(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.deepPurple, Colors.purpleAccent],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: bgColor,
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
@@ -446,19 +457,27 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                   child: Text(
                                     '${item['word'] ?? ''} - ${item['translation'] ?? ''}',
                                     style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white),
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: bgColor == Colors.white
+                                          ? Colors.black
+                                          : Colors.white,
+                                    ),
                                   ),
                                 ),
                                 // Edit Button
                                 Container(
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Colors.white24,
+                                    color: const Color.fromARGB(58, 46, 35, 35),
                                   ),
                                   child: IconButton(
-                                    icon: Icon(Icons.edit, color: Colors.white),
+                                    icon: Icon(
+                                      Icons.edit,
+                                      color: bgColor == Colors.white
+                                          ? Colors.black54
+                                          : Colors.white70,
+                                    ),
                                     onPressed: () =>
                                         _showEditWordDialog(doc.id, item),
                                   ),
@@ -483,7 +502,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
                             if ((item['context'] ?? '').isNotEmpty)
                               Text(
                                 item['context'] ?? '',
-                                style: TextStyle(color: Colors.white70),
+                                style: TextStyle(
+                                  color: bgColor == Colors.white
+                                      ? Colors.black54
+                                      : Colors.white70,
+                                ),
                               ),
                           ],
                         ),

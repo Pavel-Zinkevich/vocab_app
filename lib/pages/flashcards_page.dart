@@ -45,7 +45,13 @@ class _FlashcardsPageState extends State<FlashcardsPage>
         .collection('vocabulary')
         .get();
 
-    final words = snapshot.docs.map((doc) => doc.data()).toList();
+    final words = snapshot.docs.map((doc) {
+      final data = doc.data();
+      return {
+        ...data,
+        'status': data['status'] ?? 'uncategorized',
+      };
+    }).toList();
 
     setState(() {
       _words = words;
@@ -59,19 +65,66 @@ class _FlashcardsPageState extends State<FlashcardsPage>
   }
 
   void _pickRandomWord() {
-    if (_words.isEmpty) return;
+    if (_words.isEmpty) {
+      _currentWord = null;
+      return;
+    }
 
     final random = Random();
-    _currentWord = _words[random.nextInt(_words.length)];
+
+    // Separate words by status
+    final unknownOrUncategorized = _words
+        .where(
+            (w) => w['status'] == 'unknown' || w['status'] == 'uncategorized')
+        .toList();
+
+    final knownWords = _words.where((w) => w['status'] == 'known').toList();
+
+    if (unknownOrUncategorized.isNotEmpty) {
+      // Most of the time pick unknown/uncategorized
+      _currentWord =
+          unknownOrUncategorized[random.nextInt(unknownOrUncategorized.length)];
+    } else if (knownWords.isNotEmpty) {
+      // All unknown/uncategorized done → 20% chance to pick a known word
+      if (random.nextDouble() < 0.2) {
+        _currentWord = knownWords[random.nextInt(knownWords.length)];
+      } else {
+        // End of training session
+        _currentWord = null;
+      }
+    } else {
+      // No words left at all
+      _currentWord = null;
+    }
+
     _showTranslation = false;
   }
 
-  void _handleSwipe(bool knewIt) {
-    if (_words.isEmpty) return;
+  void _handleSwipe(bool knewIt) async {
+    if (_currentWord == null) return;
+
+    final user = _auth.currentUser;
+    if (user != null) {
+      final wordDoc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('vocabulary')
+          .where('word', isEqualTo: _currentWord!['word'])
+          .limit(1)
+          .get();
+
+      if (wordDoc.docs.isNotEmpty) {
+        await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('vocabulary')
+            .doc(wordDoc.docs.first.id)
+            .update({'status': knewIt ? 'known' : 'unknown'});
+      }
+    }
 
     setState(() {
       _words.remove(_currentWord);
-
       if (_words.isEmpty) {
         _currentWord = null;
       } else {
@@ -155,37 +208,37 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     }
 
     // 🎉 Finished training session
-    if (_words.isEmpty) {
+
+    if (_currentWord == null) {
       return Scaffold(
-        appBar: AppBar(title: Text("Flashcards")),
+        appBar: AppBar(title: Text("Flashcards")), // Keeps the navbar
+        backgroundColor: Colors.white, // Optional: set your background
         body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.emoji_events, size: 80, color: Colors.deepPurple),
-                SizedBox(height: 20),
-                Text(
-                  "Congratulations 🎉",
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                  ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.emoji_events, size: 80, color: Colors.deepPurple),
+              SizedBox(height: 20),
+              Text(
+                "Congratulations 🎉",
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple, // Match your theme
                 ),
-                SizedBox(height: 12),
-                Text(
-                  "You reviewed all words!",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-                ),
-                SizedBox(height: 30),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text("Back"),
-                )
-              ],
-            ),
+              ),
+              SizedBox(height: 12),
+              Text(
+                "You reviewed all words!",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+              ),
+              SizedBox(height: 30),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text("Back"),
+              ),
+            ],
           ),
         ),
       );
@@ -198,54 +251,49 @@ class _FlashcardsPageState extends State<FlashcardsPage>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           GestureDetector(
-            onTap: () {
-              if (_controller.isCompleted) {
-                _controller.reverse();
-              } else {
-                _controller.forward();
-              }
+            onTap: _currentWord == null
+                ? null
+                : () {
+                    if (_controller.isCompleted)
+                      _controller.reverse();
+                    else
+                      _controller.forward();
 
-              Future.delayed(Duration(milliseconds: 200), () {
-                setState(() {
-                  _showTranslation = !_showTranslation;
-                });
-              });
-            },
-            child: Dismissible(
-              key: ValueKey(_currentWord!['word']),
-              direction: DismissDirection.horizontal,
-              onDismissed: (direction) {
-                if (direction == DismissDirection.startToEnd) {
-                  _handleSwipe(false);
-                } else {
-                  _handleSwipe(true);
-                }
-              },
-              child: AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  final isUnder = (_animation.value > pi / 2);
-
-                  return Transform(
-                    transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.001)
-                      ..rotateY(_animation.value),
-                    alignment: Alignment.center,
-                    child: isUnder
-                        ? Transform(
-                            alignment: Alignment.center,
-                            transform: Matrix4.rotationY(pi),
-                            child: _buildCard(
-                              _currentWord!['translation'] ?? '',
-                            ),
-                          )
-                        : _buildCard(
-                            _currentWord!['word'] ?? '',
-                          ),
-                  );
-                },
-              ),
-            ),
+                    Future.delayed(Duration(milliseconds: 200), () {
+                      setState(() {
+                        _showTranslation = !_showTranslation;
+                      });
+                    });
+                  },
+            child: _currentWord == null
+                ? SizedBox.shrink() // No card
+                : Dismissible(
+                    key: ValueKey(_currentWord!['word']),
+                    direction: DismissDirection.horizontal,
+                    onDismissed: (direction) {
+                      _handleSwipe(direction == DismissDirection.endToStart);
+                    },
+                    child: AnimatedBuilder(
+                      animation: _animation,
+                      builder: (context, child) {
+                        final isUnder = (_animation.value > pi / 2);
+                        return Transform(
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.001)
+                            ..rotateY(_animation.value),
+                          alignment: Alignment.center,
+                          child: isUnder
+                              ? Transform(
+                                  alignment: Alignment.center,
+                                  transform: Matrix4.rotationY(pi),
+                                  child: _buildCard(
+                                      _currentWord!['translation'] ?? ''),
+                                )
+                              : _buildCard(_currentWord!['word'] ?? ''),
+                        );
+                      },
+                    ),
+                  ),
           ),
           SizedBox(height: 24),
           Text("Tap card to flip", style: TextStyle(color: Colors.grey)),

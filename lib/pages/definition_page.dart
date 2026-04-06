@@ -169,7 +169,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     final wordEsc = Uri.encodeComponent(widget.word.trim());
     final url = widget.wordUrl != null
         ? Uri.parse(widget.wordUrl!)
-        : Uri.parse('https://www.wordreference.com/enfr/$wordEsc');
+        : Uri.parse('https://www.wordreference.com/fren/$wordEsc');
 
     try {
       final resp = await http.get(url).timeout(const Duration(seconds: 12));
