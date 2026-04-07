@@ -9,6 +9,7 @@ import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
+import 'pages/email_verification_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +60,9 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      // Use userChanges() so profile updates (like emailVerified after reload)
+      // cause the AuthGate to rebuild and navigate appropriately.
+      stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
@@ -75,6 +78,10 @@ class AuthGate extends StatelessWidget {
         if (user == null) {
           return LoginPage();
         } else {
+          // If the user's email is not verified, show verification page first.
+          if (!user.emailVerified) {
+            return EmailVerificationPage();
+          }
           return HomePage();
         }
       },

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RegisterPage extends StatefulWidget {
   @override
@@ -30,22 +31,60 @@ class _RegisterPageState extends State<RegisterPage> {
 
     setState(() => _loading = true);
     try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      UserCredential userCredential =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      // authStateChanges will redirect to HomePage
+
+      User? user = userCredential.user;
+
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+
+        // ⚠️ Sign out immediately so login page checks verification properly
+        await FirebaseAuth.instance.signOut();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Account created! Please verify your email before logging in.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Optional: Wait until user verifies, or handle in login
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        if (e.code == 'weak-password') {
-          _error = 'The password provided is too weak.';
-        } else if (e.code == 'email-already-in-use') {
-          _error = 'The account already exists for that email.';
-        } else {
-          _error = e.message ?? 'Registration failed';
-        }
-      });
+      String message;
+      if (e.code == 'weak-password') {
+        message = 'The password provided is too weak.';
+      } else if (e.code == 'email-already-in-use') {
+        message = 'The account already exists for that email.';
+      } else {
+        message = e.message ?? 'Registration failed';
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+
+      setState(() => _error = message);
     } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);

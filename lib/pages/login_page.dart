@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Login page supporting email/password sign-in and Google sign-in.
 class LoginPage extends StatefulWidget {
@@ -64,31 +65,68 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _signIn() async {
-    setState(() => _error = null);
+    if (mounted) setState(() => _error = null);
+
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _loading = true);
+    if (mounted) setState(() => _loading = true);
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Refresh user to get updated emailVerified status
+        await user.reload();
+        user = FirebaseAuth.instance.currentUser;
+
+        if (!user!.emailVerified) {
+          // Send verification before signing out to ensure the email is sent
+          try {
+            await user.sendEmailVerification();
+          } catch (_) {}
+          await FirebaseAuth.instance.signOut();
+          if (mounted)
+            setState(() => _error =
+                'Please verify your email before logging in. A verification email has been sent.');
+          return;
+        }
+
+        // ✅ Only add verified users to Firestore
+        final userDoc =
+            FirebaseFirestore.instance.collection('users').doc(user.uid);
+        final docSnapshot = await userDoc.get();
+        if (!docSnapshot.exists) {
+          await userDoc.set({
+            'email': user.email,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Welcome back, ${user.email}!')),
+        );
+      }
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        _error = e.message ?? 'Authentication failed';
-      });
+      if (mounted) setState(() => _error = 'Invalid email or password');
+      debugPrint('FirebaseAuth error code: ${e.code}, message: ${e.message}');
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = 'Unexpected error: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _signInWithGoogle() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (mounted)
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
 
     final user = await AuthService().signInWithGoogle(context);
     if (user != null) {
@@ -191,8 +229,11 @@ class _LoginPageState extends State<LoginPage> {
                       if (_error != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12.0),
-                          child: Text(_error!,
-                              style: TextStyle(color: Colors.red)),
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(
+                                color: Color.fromARGB(255, 244, 54, 54)),
+                          ),
                         ),
                       SizedBox(
                         width: double.infinity,
