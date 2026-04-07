@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/calendar_utils.dart';
+import '/pages/words_added_page.dart';
 
 class CalendarPage extends StatelessWidget {
   final Map<DateTime, int> data;
@@ -53,7 +54,22 @@ class CalendarPage extends StatelessWidget {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 8),
-                  buildMonthGrid(year, month, data), // reused from profile_tab
+                  buildMonthGrid(
+                    year,
+                    month,
+                    data,
+                    context,
+                    onDayTap: (date) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => WordsAddedPage(
+                            selectedDate: date,
+                          ), // <-- open CalendarPage
+                        ),
+                      );
+                    },
+                  ), // reused from profile_tab
                 ],
               ),
             );

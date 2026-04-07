@@ -469,6 +469,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                 ),
                                 // Edit Button
                                 Container(
+                                  width: 40, // width of container
+                                  height: 40,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: const Color.fromARGB(58, 46, 35, 35),
@@ -487,11 +489,14 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                 SizedBox(width: 8),
                                 // Delete Button
                                 Container(
+                                  width: 40, // width of container
+                                  height: 40,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: Colors.redAccent.withOpacity(0.2),
                                   ),
                                   child: IconButton(
+                                    // iconSize: 30.0,
                                     icon: Icon(Icons.close,
                                         color: Colors.redAccent),
                                     onPressed: () => _deleteWord(doc.id),
