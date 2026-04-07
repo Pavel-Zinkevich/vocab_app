@@ -59,6 +59,29 @@ class _AudioOption {
   _AudioOption(this.label, this.url);
 }
 
+/// --- Clean raw translations from grammar tags and symbols ---
+String _cleanTranslation(String raw) {
+  String cleaned = raw;
+
+  // Remove everything after ⇒
+  if (cleaned.contains('⇒')) cleaned = cleaned.split('⇒')[0];
+
+  // Remove grammar tags
+  final grammarPattern = RegExp(
+    r'\b(vtr|vi|adj|adv|expr|loc|prep| v|v pron|interj|n|nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
+    caseSensitive: false,
+  );
+  cleaned = cleaned.replaceAll(grammarPattern, '');
+
+  // Remove extra symbols like "+"
+  cleaned = cleaned.replaceAll('+', '');
+
+  // Normalize spaces
+  cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  return cleaned;
+}
+
 /// --- Definition Page State ---
 class _DefinitionPageState extends State<DefinitionPage> {
   bool _loading = true;
@@ -84,29 +107,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
     super.dispose();
   }
 
-  /// --- Clean raw translations from grammar tags and symbols ---
-  String _cleanTranslation(String raw) {
-    String cleaned = raw;
-
-    // Remove everything after ⇒
-    if (cleaned.contains('⇒')) cleaned = cleaned.split('⇒')[0];
-
-    // Remove grammar tags
-    final grammarPattern = RegExp(
-      r'\b(vtr|vi|adj|adv|expr|prep|interj|n|nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
-      caseSensitive: false,
-    );
-    cleaned = cleaned.replaceAll(grammarPattern, '');
-
-    // Remove extra symbols like "+"
-    cleaned = cleaned.replaceAll('+', '');
-
-    // Normalize spaces
-    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
-
-    return cleaned;
-  }
-
   /// --- Add a word to user's Firebase vocabulary ---
   Future<void> _addWordToVocabulary(_Sense sense) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -118,7 +118,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
           .doc(user.uid)
           .collection('vocabulary')
           .add({
-        'word': sense.french,
+        'word': _cleanTranslation(sense.french),
         'translation': _cleanTranslation(sense.translation),
         'context': sense.frExamples.isNotEmpty ? sense.frExamples.first : '',
         'createdAt': FieldValue.serverTimestamp(),
@@ -637,11 +637,17 @@ class _SenseTile extends StatelessWidget {
                 TextSpan(
                     text: '${index + 1}. ',
                     style: base?.copyWith(fontWeight: FontWeight.w600)),
-                ..._formatTermSpans(sense.french,
-                    isLemma: true, base: base, pos: posStyle),
+                TextSpan(
+                  text: _cleanTranslation(sense.french),
+                  style: base?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(
+                  text: " - ",
+                  style: base?.copyWith(fontWeight: FontWeight.w700),
+                ),
                 TextSpan(
                   text: ' ${sense.translation}',
-                  style: base?.copyWith(fontWeight: FontWeight.w600),
+                  style: base?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -672,6 +678,7 @@ class _SenseTile extends StatelessWidget {
     ];
   }
 
+  ///useless
   static List<InlineSpan> _formatTermSpans(String raw,
       {required bool isLemma, TextStyle? base, TextStyle? pos}) {
     final spans = <InlineSpan>[];

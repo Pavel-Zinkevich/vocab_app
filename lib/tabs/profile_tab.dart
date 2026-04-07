@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../pages/definition_page.dart';
+import '../pages/calendar_page.dart';
+import '../utils/calendar_utils.dart'; // ✅ import shared calendar helpers
 
 class ProfileTab extends StatefulWidget {
   @override
@@ -13,6 +14,32 @@ class _ProfileTabState extends State<ProfileTab>
   late TabController _tabController;
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
+
+  Future<Map<DateTime, int>> _getWordStats() async {
+    final user = _auth.currentUser;
+    if (user == null) return {};
+
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('vocabulary')
+        .get();
+
+    Map<DateTime, int> dailyCounts = {};
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      final timestamp = data['createdAt'];
+
+      if (timestamp != null) {
+        final date = (timestamp as Timestamp).toDate();
+        final day = DateTime(date.year, date.month, date.day);
+        dailyCounts[day] = (dailyCounts[day] ?? 0) + 1;
+      }
+    }
+
+    return dailyCounts;
+  }
 
   @override
   void initState() {
@@ -29,7 +56,6 @@ class _ProfileTabState extends State<ProfileTab>
     super.dispose();
   }
 
-  // ✅ _clearHistory is now inside the State class, so `context` works
   Future<void> _clearHistory() async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -97,7 +123,50 @@ class _ProfileTabState extends State<ProfileTab>
       body: TabBarView(
         controller: _tabController,
         children: [
-          Center(child: Text('User info coming soon')),
+          FutureBuilder<Map<DateTime, int>>(
+            future: _getWordStats(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return Center(
+                  child: CircularProgressIndicator(color: Colors.deepPurple),
+                );
+              }
+
+              final data = snapshot.data!;
+
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Your Learning Activity',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CalendarPage(data: data),
+                          ),
+                        );
+                      },
+                      child: buildMonthGrid(
+                        DateTime.now().year,
+                        DateTime.now().month,
+                        data,
+                      ), // ✅ use shared function
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
           user == null
               ? Center(child: Text('Please log in to see history.'))
               : StreamBuilder<QuerySnapshot>(
