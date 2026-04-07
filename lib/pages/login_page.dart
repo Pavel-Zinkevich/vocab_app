@@ -85,11 +85,14 @@ class _LoginPageState extends State<LoginPage> {
         user = FirebaseAuth.instance.currentUser;
 
         if (!user!.emailVerified) {
-          // Send verification before signing out to ensure the email is sent
+          // Send verification email. Do NOT sign the user out here so the
+          // EmailVerificationPage remains visible until the user verifies
+          // or manually signs out. The AuthGate listens to Firebase auth
+          // changes and will show the verification page for signed-in,
+          // unverified users.
           try {
             await user.sendEmailVerification();
           } catch (_) {}
-          await FirebaseAuth.instance.signOut();
           if (mounted)
             setState(() => _error =
                 'Please verify your email before logging in. A verification email has been sent.');
