@@ -47,12 +47,13 @@ class _VocabularyTabState extends State<VocabularyTab> {
         if (!mounted) return;
 
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Word added')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Word added'), duration: Duration(seconds: 1)));
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed to add word: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to add word: $e'),
+            duration: Duration(seconds: 1)));
       }
     }
 
@@ -157,12 +158,13 @@ class _VocabularyTabState extends State<VocabularyTab> {
           .doc(docId)
           .delete();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Word deleted')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Word deleted'), duration: Duration(seconds: 1)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed to delete word: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to delete word: $e'),
+          duration: Duration(seconds: 1)));
     }
   }
 

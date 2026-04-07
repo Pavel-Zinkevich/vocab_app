@@ -9,25 +9,27 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// --- Main Definition Page Widget ---
 class DefinitionPage extends StatefulWidget {
   final String word;
   final bool showAudio;
-  final String? wordUrl; // <-- add this
+  final String? wordUrl;
 
   const DefinitionPage({
     Key? key,
     required this.word,
     this.showAudio = true,
-    this.wordUrl, // <-- add this
+    this.wordUrl,
   }) : super(key: key);
 
   @override
   State<DefinitionPage> createState() => _DefinitionPageState();
 }
 
+/// --- Global listen label (dynamic for FR/EN) ---
 String _listenLabel = 'ÉCOUTER:';
 
-/// --- Audio dropdown model ---
+/// --- Audio Dropdown Model ---
 class _AudioDropdownValue {
   final int? accentIndex;
   final double? speed;
@@ -39,7 +41,7 @@ class _AudioDropdownValue {
   bool get isSpeed => speed != null;
 }
 
-/// --- Word sense model ---
+/// --- Word Sense Model ---
 class _Sense {
   final String french;
   final String translation;
@@ -49,7 +51,7 @@ class _Sense {
   _Sense({required this.french, required this.translation});
 }
 
-/// --- Audio option model ---
+/// --- Audio Option Model ---
 class _AudioOption {
   final String label;
   final String url;
@@ -57,6 +59,7 @@ class _AudioOption {
   _AudioOption(this.label, this.url);
 }
 
+/// --- Definition Page State ---
 class _DefinitionPageState extends State<DefinitionPage> {
   bool _loading = true;
   String? _error;
@@ -67,30 +70,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
   int _accentIndex = 0;
   double _speed = 1.0;
   String? _ipa;
-  String _cleanTranslation(String raw) {
-    String cleaned = raw;
-
-    // 1️⃣ Remove everything after ⇒
-    if (cleaned.contains('⇒')) {
-      cleaned = cleaned.split('⇒')[0];
-    }
-
-    // 2️⃣ Remove grammar tags
-    final grammarPattern = RegExp(
-      r'\b(vtr|vi|adj|adv|expr|prep|interj|n|nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
-      caseSensitive: false,
-    );
-
-    cleaned = cleaned.replaceAll(grammarPattern, '');
-
-    // 3️⃣ Remove extra symbols like "+"
-    cleaned = cleaned.replaceAll('+', '');
-
-    // 4️⃣ Normalize spaces
-    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
-
-    return cleaned;
-  }
 
   @override
   void initState() {
@@ -105,7 +84,31 @@ class _DefinitionPageState extends State<DefinitionPage> {
     super.dispose();
   }
 
-  Future<void> _addWordToVocabulary() async {
+  /// --- Clean raw translations from grammar tags and symbols ---
+  String _cleanTranslation(String raw) {
+    String cleaned = raw;
+
+    // Remove everything after ⇒
+    if (cleaned.contains('⇒')) cleaned = cleaned.split('⇒')[0];
+
+    // Remove grammar tags
+    final grammarPattern = RegExp(
+      r'\b(vtr|vi|adj|adv|expr|prep|interj|n|nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
+      caseSensitive: false,
+    );
+    cleaned = cleaned.replaceAll(grammarPattern, '');
+
+    // Remove extra symbols like "+"
+    cleaned = cleaned.replaceAll('+', '');
+
+    // Normalize spaces
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    return cleaned;
+  }
+
+  /// --- Add a word to user's Firebase vocabulary ---
+  Future<void> _addWordToVocabulary(_Sense sense) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -115,24 +118,24 @@ class _DefinitionPageState extends State<DefinitionPage> {
           .doc(user.uid)
           .collection('vocabulary')
           .add({
-        'word': widget.word,
-        'translation': _senses.isNotEmpty
-            ? _cleanTranslation(_senses.first.translation)
-            : '',
-        'context': _senses.isNotEmpty && _senses.first.frExamples.isNotEmpty
-            ? _senses.first.frExamples.first
-            : '',
+        'word': sense.french,
+        'translation': _cleanTranslation(sense.translation),
+        'context': sense.frExamples.isNotEmpty ? sense.frExamples.first : '',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Word "${widget.word}" added to vocabulary')),
+        SnackBar(
+            content: Text('Word "${sense.french}" added to vocabulary'),
+            duration: Duration(seconds: 1)),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add word: $e')),
+        SnackBar(
+            content: Text('Failed to add word: $e'),
+            duration: Duration(seconds: 1)),
       );
     }
   }
@@ -156,6 +159,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
         'wr_audio-fr', '$_accentIndex:${_speed.toStringAsFixed(2)}');
   }
 
+  /// --- Prepare audio player ---
   Future<void> _preparePlayer() async {
     if (_audio.isEmpty) return;
     _accentIndex = _accentIndex.clamp(0, _audio.length - 1);
@@ -163,7 +167,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     await _player.setSpeed(_speed);
   }
 
-  /// --- Extract audio files from HTML ---
+  /// --- Extract audio files from WordReference HTML ---
   List<_AudioOption> _extractAudioFiles(String html) {
     final match = RegExp(r"window\.audioFiles\s*=\s*\[(.*?)\];", dotAll: true)
         .firstMatch(html);
@@ -182,7 +186,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     }).toList();
   }
 
-  /// --- Fetch and parse definition ---
+  /// --- Fetch definition from WordReference ---
   Future<void> _fetchDefinition() async {
     setState(() {
       _loading = true;
@@ -214,23 +218,25 @@ class _DefinitionPageState extends State<DefinitionPage> {
     if (mounted) setState(() => _loading = false);
   }
 
+  /// --- Detect if listen label should be EN/FR ---
   void _detectListenLabel(dom.Document document) {
     final listenSpan = document.querySelector('#listen_txt')?.text.trim() ?? '';
     if (listenSpan.toLowerCase().startsWith('listen')) {
       _listenLabel = 'LISTEN:';
-    } else if (listenSpan.toLowerCase().startsWith('ecouter')) {
-      _listenLabel = 'ÉCOUTER:';
     } else {
-      _listenLabel = 'ÉCOUTER:'; // fallback
+      _listenLabel = 'ÉCOUTER:'; // default fallback
     }
   }
 
-  /// --- HTML parsing ---
+  /// --- Parse HTML and extract definitions, examples, IPA, and audio ---
   void _parseHtml(String body) {
     final document = html_parser.parse(body);
+
+    // Remove scripts/styles
     document
         .querySelectorAll('script, style, noscript')
         .forEach((e) => e.remove());
+
     _detectListenLabel(document);
     _ipa = document.querySelector('#pronWR')?.text.trim();
 
@@ -267,6 +273,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     return null;
   }
 
+  /// --- Show a dialog to look up a new word ---
   void _showLookupDialog() {
     final lookupController = TextEditingController();
 
@@ -274,17 +281,15 @@ class _DefinitionPageState extends State<DefinitionPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Look up a word'),
+          title: const Text('Look up a word'),
           content: TextField(
             controller: lookupController,
-            decoration: InputDecoration(
-              hintText: 'Enter word',
-            ),
+            decoration: const InputDecoration(hintText: 'Enter word'),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -294,12 +299,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => DefinitionPage(word: word),
-                    ),
+                        builder: (_) => DefinitionPage(word: word)),
                   );
                 }
               },
-              child: Text('Look Up'),
+              child: const Text('Look Up'),
             ),
           ],
         );
@@ -307,6 +311,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     );
   }
 
+  /// --- UI badge helpers ---
   String get _badgeLabel {
     final url = widget.wordUrl ?? '';
     if (url.contains('/enfr/')) return 'English → French';
@@ -319,9 +324,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
         'https://www.wordreference.com/enfr/${widget.word}';
   }
 
+  /// --- Parse table rows for senses and examples ---
   void _parseTableRows(dom.Element table, HtmlUnescape unescape) {
-    // Check if the first row is a language header
-    final firstRow = table.querySelector('tr.langHeader');
     bool isHeaderRow(dom.Element tr) {
       return tr.querySelectorAll('th').isNotEmpty ||
           tr.classes.contains('langHeader') ||
@@ -375,7 +379,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     }
   }
 
-  /// --- UI ---
+  /// --- Build UI ---
   @override
   Widget build(BuildContext context) {
     final surface = Theme.of(context).colorScheme.surface;
@@ -396,7 +400,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
         heroTag: 'lookupWord',
         backgroundColor: Colors.deepPurple,
         onPressed: _showLookupDialog,
-        child: Icon(Icons.search, color: Colors.white),
+        child: const Icon(Icons.search, color: Colors.white),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
@@ -430,7 +434,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
             borderRadius: BorderRadius.circular(18),
             boxShadow: const [
               BoxShadow(
-                  color: Color(0x11000000),
+                  color: Color.fromARGB(17, 255, 0, 0),
                   blurRadius: 12,
                   offset: Offset(0, 6))
             ],
@@ -442,6 +446,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
   }
 
   Widget _buildContentCard() {
+    /// Header
     final titleStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w800,
           fontSize: 28,
@@ -451,49 +456,22 @@ class _DefinitionPageState extends State<DefinitionPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Word title
         Text(widget.word, style: titleStyle),
         const SizedBox(height: 10),
-
-        // Row with Badge + Add Word button
         Row(
+          ///badge
           children: [
-            _Badge(
-              label: _badgeLabel,
-              url: _badgeUrl,
-            ),
-            const SizedBox(width: 12), // space between badge and button
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _addWordToVocabulary,
-                icon: Icon(Icons.add, color: Colors.white),
-                label: Text(
-                  'Add to Vocabulary',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  minimumSize: Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
+            _Badge(label: _badgeLabel, url: _badgeUrl),
+            const SizedBox(width: 12),
           ],
         ),
-        const SizedBox(height: 12),
 
-        // Audio bar below
+        ///audio
+        const SizedBox(height: 12),
         if (widget.showAudio && _audio.isNotEmpty) ...[
           _buildAudioBar(),
           const SizedBox(height: 12),
         ],
-
-        // List of senses
         if (_senses.isNotEmpty)
           ListView.separated(
             physics: const NeverScrollableScrollPhysics(),
@@ -508,6 +486,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     );
   }
 
+  /// --- Audio Bar Widget ---
   Widget _buildAudioBar() {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
@@ -533,7 +512,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
             } catch (_) {}
           },
           icon: const Icon(Icons.volume_up_rounded),
-          label: Text(_listenLabel), // <-- use dynamic label here
+          label: Text(_listenLabel),
         ),
         SizedBox(
           width: 180,
@@ -643,30 +622,34 @@ class _SenseTile extends StatelessWidget {
         color: Colors.grey.shade700,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.2);
-    final arrowStyle = base?.copyWith(
-        color: Colors.grey.shade700, fontWeight: FontWeight.w600);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        RichText(
-          text: TextSpan(
-            style: base?.copyWith(color: Colors.black87),
-            children: [
-              TextSpan(
-                  text: '${index + 1}. ',
-                  style: base?.copyWith(fontWeight: FontWeight.w600)),
-              ..._formatTermSpans(sense.french,
-                  isLemma: true, base: base, pos: posStyle),
-              TextSpan(text: '  →  ', style: arrowStyle),
-              ..._formatTermSpans(sense.translation,
-                  isLemma: false, base: base, pos: posStyle),
-            ],
+    final state = context.findAncestorStateOfType<_DefinitionPageState>();
+
+    return GestureDetector(
+      onTap: () => state?._addWordToVocabulary(sense),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RichText(
+            text: TextSpan(
+              style: base?.copyWith(color: Colors.black87),
+              children: [
+                TextSpan(
+                    text: '${index + 1}. ',
+                    style: base?.copyWith(fontWeight: FontWeight.w600)),
+                ..._formatTermSpans(sense.french,
+                    isLemma: true, base: base, pos: posStyle),
+                TextSpan(
+                  text: ' ${sense.translation}',
+                  style: base?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
-        ),
-        ..._buildExamples(sense.frExamples, context),
-        ..._buildExamples(sense.enExamples, context, italic: true),
-      ],
+          ..._buildExamples(sense.frExamples, context),
+          ..._buildExamples(sense.enExamples, context, italic: true),
+        ],
+      ),
     );
   }
 
