@@ -67,6 +67,30 @@ class _DefinitionPageState extends State<DefinitionPage> {
   int _accentIndex = 0;
   double _speed = 1.0;
   String? _ipa;
+  String _cleanTranslation(String raw) {
+    String cleaned = raw;
+
+    // 1️⃣ Remove everything after ⇒
+    if (cleaned.contains('⇒')) {
+      cleaned = cleaned.split('⇒')[0];
+    }
+
+    // 2️⃣ Remove grammar tags
+    final grammarPattern = RegExp(
+      r'\b(vtr|vi|adj|adv|expr|prep|interj|n|nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
+      caseSensitive: false,
+    );
+
+    cleaned = cleaned.replaceAll(grammarPattern, '');
+
+    // 3️⃣ Remove extra symbols like "+"
+    cleaned = cleaned.replaceAll('+', '');
+
+    // 4️⃣ Normalize spaces
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    return cleaned;
+  }
 
   @override
   void initState() {
@@ -92,7 +116,9 @@ class _DefinitionPageState extends State<DefinitionPage> {
           .collection('vocabulary')
           .add({
         'word': widget.word,
-        'translation': _senses.isNotEmpty ? _senses.first.translation : '',
+        'translation': _senses.isNotEmpty
+            ? _cleanTranslation(_senses.first.translation)
+            : '',
         'context': _senses.isNotEmpty && _senses.first.frExamples.isNotEmpty
             ? _senses.first.frExamples.first
             : '',
@@ -318,7 +344,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
         final sense = _Sense(
           french: unescape.convert(french),
-          translation: unescape.convert(translation),
+          translation: _cleanTranslation(unescape.convert(translation)),
         );
 
         _attachExamples(sense, frExTd, toExTd, unescape);
