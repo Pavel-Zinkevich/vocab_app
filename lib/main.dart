@@ -5,7 +5,7 @@ import 'tabs/profile_tab.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
@@ -13,9 +13,17 @@ import 'pages/email_verification_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialize Hive once at startup and open the cache box. Box name
+  // must match what the app tabs expect ('vocab').
+  await Hive.initFlutter();
+  await Hive.openBox('vocab');
+
   runApp(VocabApp());
 }
 

@@ -68,7 +68,7 @@ String _cleanTranslation(String raw) {
 
   // Remove grammar tags
   final grammarPattern = RegExp(
-    r'\b(vtr|vi|adj|adv|expr|loc|prep| v|v pron|interj|n|nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
+    r'\b(vtr|vi|adj|adv|expr|loc|prep| v|insep|phrasal|v pron|interj|n|nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
     caseSensitive: false,
   );
   cleaned = cleaned.replaceAll(grammarPattern, '');
