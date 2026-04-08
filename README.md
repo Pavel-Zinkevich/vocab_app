@@ -67,9 +67,9 @@ docs/images/
 
 Example:
 
-![Vocabulary Screen](docs/images/vocabulary.png)  
+<!-- ![Vocabulary Screen](docs/images/vocabulary.png)  
 ![Training Screen](docs/images/training.png)  
-![Profile Screen](docs/images/profile.png)
+![Profile Screen](docs/images/profile.png) -->
 
 💡 Tip: Add `.gitkeep` so Git tracks the folder.
 
