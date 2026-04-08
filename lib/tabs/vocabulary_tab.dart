@@ -343,9 +343,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
           title: Text('Look up a word'),
           content: TextField(
             controller: lookupController,
-            decoration: InputDecoration(
-              hintText: 'Enter word',
-            ),
+            decoration: InputDecoration(hintText: 'Enter word'),
           ),
           actions: [
             TextButton(
@@ -355,37 +353,68 @@ class _VocabularyTabState extends State<VocabularyTab> {
             ElevatedButton(
               onPressed: () async {
                 final word = lookupController.text.trim();
-                if (word.isNotEmpty) {
-                  final user = _auth.currentUser;
-                  if (user != null) {
-                    final historyRef = _firestore
-                        .collection('users')
-                        .doc(user.uid)
-                        .collection('history');
+                if (word.isEmpty) return;
 
-                    await historyRef.add({
+                // --- 1. Добавляем сразу в Hive ---
+                final localKey =
+                    'local_${DateTime.now().millisecondsSinceEpoch}';
+                final nowIso = DateTime.now().toUtc().toIso8601String();
+
+                await _box.put(localKey, {
+                  'word': word,
+                  'lookedUpAt': nowIso,
+                  '__localKey': localKey,
+                  'pending': true, // пометка для синхронизации
+                });
+
+                if (mounted) setState(() {});
+
+                Navigator.pop(context);
+
+                // --- 2. Переходим на страницу определения ---
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DefinitionPage(word: word),
+                  ),
+                );
+
+                // --- 3. Асинхронная синхронизация с Firestore ---
+                final user = _auth.currentUser;
+                if (user != null) {
+                  final historyRef = _firestore
+                      .collection('users')
+                      .doc(user.uid)
+                      .collection('history');
+
+                  try {
+                    final docRef = await historyRef.add({
                       'word': word,
                       'lookedUpAt': FieldValue.serverTimestamp(),
                     });
 
+                    // После успешного добавления в Firestore обновляем Hive
+                    final raw = _box.get(localKey);
+                    if (raw != null) {
+                      final updated = Map<String, dynamic>.from(raw as Map);
+                      updated['pending'] = false;
+                      updated['__localKey'] = docRef.id;
+                      await _box.put(docRef.id, updated);
+                      await _box.delete(localKey);
+                    }
+
+                    // Ограничение истории до 100 элементов
                     final snapshot = await historyRef
                         .orderBy('lookedUpAt', descending: true)
                         .get();
-
                     if (snapshot.docs.length > 100) {
                       for (var doc in snapshot.docs.skip(100)) {
                         await historyRef.doc(doc.id).delete();
                       }
                     }
+                  } catch (_) {
+                    // если нет интернета, оставляем pending = true и синхронизируем позже
                   }
-
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DefinitionPage(word: word),
-                    ),
-                  );
                 }
               },
               child: Text('Look Up'),
@@ -665,6 +694,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'add_word_fab',
         onPressed: _showAddWordDialog,
         label: Text(
           "Add a New Word",
