@@ -154,6 +154,12 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     });
   }
 
+  String _safeText(dynamic value, String fallback) {
+    if (value == null) return fallback;
+    if (value is String && value.trim().isEmpty) return fallback;
+    return value.toString();
+  }
+
   Color _cardColor() {
     final status = _currentWord?['status'] ?? 'learning';
 
@@ -310,11 +316,12 @@ class _FlashcardsPageState extends State<FlashcardsPage>
                             ? Transform(
                                 alignment: Alignment.center,
                                 transform: Matrix4.rotationY(pi),
-                                child: _buildCard(
-                                  _currentWord!['translation'] ?? '',
-                                ),
+                                child: _buildCard(_safeText(
+                                    _currentWord?['translation'],
+                                    "No translation")),
                               )
-                            : _buildCard(_currentWord!['word'] ?? ''),
+                            : _buildCard(
+                                _safeText(_currentWord?['word'], "No word")),
                       );
                     },
                   ),
