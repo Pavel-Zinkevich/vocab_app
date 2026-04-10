@@ -8,6 +8,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../theme/app_colors.dart';
 
 /// --- Main Definition Page Widget ---
 class DefinitionPage extends StatefulWidget {
@@ -391,24 +392,25 @@ class _DefinitionPageState extends State<DefinitionPage> {
   Widget build(BuildContext context) {
     final surface = Theme.of(context).colorScheme.surface;
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F5F7),
+      backgroundColor: AppColors.pageBackground,
       appBar: AppBar(
         // automaticallyImplyLeading: false, arrow
         elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
+        backgroundColor: AppColors.appBarTransparent,
+        foregroundColor: AppColors.appBarText,
         title: const Text('', style: TextStyle(color: Colors.black)),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.loader))
           : _error != null
               ? _buildError()
               : _buildContent(surface),
       floatingActionButton: FloatingActionButton(
         heroTag: 'lookupWord',
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: AppColors.fab,
         onPressed: _showLookupDialog,
-        child: const Icon(Icons.search, color: Colors.white),
+        child: const Icon(Icons.search, color: AppColors.white),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
@@ -442,7 +444,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
             borderRadius: BorderRadius.circular(18),
             boxShadow: const [
               BoxShadow(
-                  color: Color.fromARGB(17, 255, 0, 0),
+                  color: AppColors.cardShadow,
                   blurRadius: 12,
                   offset: Offset(0, 6))
             ],
@@ -497,9 +499,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
   /// --- Audio Bar Widget ---
   Widget _buildAudioBar() {
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Colors.black12),
-    );
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AppColors.controlBorder));
 
     return Wrap(
       spacing: 8,
@@ -587,7 +588,7 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const color = Color(0xFF5C7CF2);
+    const color = AppColors.badge;
 
     return GestureDetector(
       onTap: url != null
@@ -600,7 +601,7 @@ class _Badge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.16),
+          color: AppColors.badgeBg,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(color: color.withOpacity(0.6)),
         ),
@@ -627,7 +628,7 @@ class _SenseTile extends StatelessWidget {
     final base = Theme.of(context).textTheme.bodyLarge;
     final posStyle = base?.copyWith(
         fontSize: (base?.fontSize ?? 16) - 2,
-        color: Colors.grey.shade700,
+        color: AppColors.textMuted,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.2);
 
@@ -640,7 +641,7 @@ class _SenseTile extends StatelessWidget {
         children: [
           RichText(
             text: TextSpan(
-              style: base?.copyWith(color: Colors.black87),
+              style: base?.copyWith(color: AppColors.textPrimaryStrong),
               children: [
                 TextSpan(
                     text: '${index + 1}. ',
@@ -679,7 +680,7 @@ class _SenseTile extends StatelessWidget {
           style: italic
               ? Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontStyle: FontStyle.italic,
-                  color: Colors.black.withOpacity(0.7))
+                  color: AppColors.textPrimaryStrong.withOpacity(0.7))
               : Theme.of(context).textTheme.bodyMedium,
         ),
       ),

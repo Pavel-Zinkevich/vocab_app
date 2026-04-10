@@ -523,10 +523,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
       body: Stack(
         children: [
           if (!_hiveReady)
-            Center(
-                child: CircularProgressIndicator(
-              color: Colors.deepPurple,
-            ))
+            Center(child: CircularProgressIndicator(color: AppColors.loader))
           else
             ValueListenableBuilder(
               valueListenable: _box.listenable(),
@@ -567,7 +564,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   return Center(
                       child: Text('No words yet. Tap + to add one.',
                           style: TextStyle(
-                              fontSize: 16, color: Colors.grey[700])));
+                              fontSize: 16, color: AppColors.textSecondary)));
                 }
 
                 return ListView.builder(
@@ -599,7 +596,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black26,
+                                color: AppColors.shadow,
                                 blurRadius: 6,
                                 offset: Offset(0, 4),
                               )
@@ -625,10 +622,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                     width: 40,
                                     height: 40,
                                     decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color:
-                                          const Color.fromARGB(58, 46, 35, 35),
-                                    ),
+                                        shape: BoxShape.circle,
+                                        color: AppColors.iconBg),
                                     child: IconButton(
                                       icon: Icon(
                                         Icons.edit,
@@ -647,12 +642,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                     width: 40,
                                     height: 40,
                                     decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.redAccent.withOpacity(0.2),
-                                    ),
+                                        shape: BoxShape.circle,
+                                        color: AppColors.dangerBg),
                                     child: IconButton(
                                       icon: Icon(Icons.close,
-                                          color: Colors.redAccent),
+                                          color: AppColors.danger),
                                       onPressed: () => _deleteWord(
                                           item['__localKey'] ??
                                               item['remoteId'] ??
@@ -684,7 +678,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
               heroTag: 'lookupWord',
               backgroundColor: AppColors.heatMidLow,
               onPressed: _showLookupDialog,
-              child: Icon(Icons.search, color: Colors.white),
+              child: Icon(Icons.search, color: AppColors.white),
             ),
           ),
         ],
@@ -695,12 +689,12 @@ class _VocabularyTabState extends State<VocabularyTab> {
         label: Text(
           "Add a New Word",
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.white,
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
         ),
-        icon: Icon(Icons.add, color: Colors.white),
+        icon: Icon(Icons.add, color: AppColors.white),
         backgroundColor: AppColors.heatMidLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
