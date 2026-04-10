@@ -5,7 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../pages/calendar_page.dart';
 import '../utils/calendar_utils.dart';
 import '../pages/history_page.dart';
-import '../utils/diagram.dart'; // ProgressPage is here
+import '../utils/diagram.dart';
+
+import '../theme/app_colors.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -34,7 +36,6 @@ class _ProfileTabState extends State<ProfileTab>
     super.dispose();
   }
 
-  /// ✅ Fetch raw vocabulary (single source of truth)
   Future<List<Map<String, dynamic>>> _getVocabulary() async {
     final user = _auth.currentUser;
     if (user == null) return [];
@@ -54,7 +55,6 @@ class _ProfileTabState extends State<ProfileTab>
     }).toList();
   }
 
-  /// ✅ Build calendar map from words
   Map<DateTime, int> _buildDailyStats(List<Map<String, dynamic>> words) {
     final Map<DateTime, int> data = {};
 
@@ -72,14 +72,29 @@ class _ProfileTabState extends State<ProfileTab>
 
   @override
   Widget build(BuildContext context) {
+    final bg = AppColors.background;
+
+    final tabBg = AppColors.navBar;
+    final textColor = AppColors.textForBackground(tabBg);
+
     return Scaffold(
+      backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('Profile'),
+        backgroundColor: tabBg,
+        elevation: 0,
+        title: Text(
+          'Profile',
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        iconTheme: IconThemeData(color: textColor),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: AppColors.learning,
+          labelColor: AppColors.learning,
+          unselectedLabelColor: textColor.withOpacity(0.6),
           tabs: const [
             Tab(icon: Icon(Icons.info), text: 'Info'),
             Tab(icon: Icon(Icons.history), text: 'History'),
@@ -87,7 +102,7 @@ class _ProfileTabState extends State<ProfileTab>
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: Icon(Icons.logout, color: textColor),
             onPressed: () async => await _auth.signOut(),
           ),
         ],
@@ -100,9 +115,9 @@ class _ProfileTabState extends State<ProfileTab>
             future: _getVocabulary(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return const Center(
+                return Center(
                   child: CircularProgressIndicator(
-                    color: Colors.deepPurple,
+                    color: AppColors.learning,
                   ),
                 );
               }
@@ -114,57 +129,54 @@ class _ProfileTabState extends State<ProfileTab>
                   ? 1
                   : calendarData.values.reduce((a, b) => a > b ? a : b);
 
+              final textColor =
+                  AppColors.textForBackground(AppColors.background);
+
               return SingleChildScrollView(
                 child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Your Learning Activity',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your Learning Activity',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CalendarPage(data: calendarData),
                           ),
                         ),
-                        const SizedBox(height: 16),
-
-                        /// 📅 Calendar
-                        GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CalendarPage(data: calendarData),
-                            ),
-                          ),
-                          child: buildMonthGrid(
-                            DateTime.now().year,
-                            DateTime.now().month,
-                            calendarData,
-                            context,
-                          ),
+                        child: buildMonthGrid(
+                          DateTime.now().year,
+                          DateTime.now().month,
+                          calendarData,
+                          context,
                         ),
-
-                        const SizedBox(height: 12),
-
-                        buildLegend(maxCount, context),
-
-                        const SizedBox(height: 24),
-
-                        const Text(
-                          "Vocabulary Progress",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      ),
+                      const SizedBox(height: 12),
+                      buildLegend(maxCount, context),
+                      const SizedBox(height: 24),
+                      Text(
+                        "Vocabulary Progress",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
                         ),
-
-                        const SizedBox(height: 12),
-
-                        /// 📊 Progress ring (FIXED TYPE)
-                        ProgressPage(words: words),
-                      ],
-                    )),
+                      ),
+                      const SizedBox(height: 12),
+                      ProgressPage(words: words),
+                    ],
+                  ),
+                ),
               );
             },
           ),

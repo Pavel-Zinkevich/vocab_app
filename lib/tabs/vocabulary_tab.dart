@@ -487,19 +487,32 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
   @override
   Widget build(BuildContext context) {
+    final Color appBarColor = AppColors.navBar;
+    final Color textColor = AppColors.textForBackground(appBarColor);
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: AppColors.navBar,
+        iconTheme: IconThemeData(
+          color: AppColors.textForBackground(AppColors.navBar),
+        ),
         title: TextField(
           controller: _searchController,
           decoration: InputDecoration(
             hintText: 'Search your words...',
             border: InputBorder.none,
-            hintStyle: TextStyle(color: Colors.white70),
-            prefixIcon: Icon(Icons.search, color: Colors.white),
+            hintStyle: TextStyle(
+              color: AppColors.textForBackground(AppColors.navBar)
+                  .withOpacity(0.6),
+            ),
+            prefixIcon: Icon(
+              Icons.search,
+              color: AppColors.textForBackground(AppColors.navBar),
+            ),
           ),
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(
+            color: AppColors.textForBackground(AppColors.navBar),
+          ),
           onChanged: (value) {
             setState(() {
               _searchQuery = value.trim().toLowerCase();
@@ -669,7 +682,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
             right: 16,
             child: FloatingActionButton(
               heroTag: 'lookupWord',
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: AppColors.heatMidLow,
               onPressed: _showLookupDialog,
               child: Icon(Icons.search, color: Colors.white),
             ),
@@ -688,7 +701,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
           ),
         ),
         icon: Icon(Icons.add, color: Colors.white),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: AppColors.heatHigh,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),

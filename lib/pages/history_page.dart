@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:async';
 import '../pages/definition_page.dart';
+import '../theme/app_colors.dart'; // 👈 add this
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -60,6 +61,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
     final coll =
         _firestore.collection('users').doc(user.uid).collection('history');
+
     _firestoreSub?.cancel();
     _firestoreSub = coll
         .orderBy('lookedUpAt', descending: true)
@@ -68,6 +70,7 @@ class _HistoryPageState extends State<HistoryPage> {
         .listen((snapshot) async {
       for (final change in snapshot.docChanges) {
         final doc = change.doc;
+
         if (change.type == DocumentChangeType.removed) {
           await _box.delete(doc.id);
           if (mounted) setState(() {});
@@ -78,14 +81,11 @@ class _HistoryPageState extends State<HistoryPage> {
         final map = <String, dynamic>{
           'word': data?['word'] ?? '',
           'lookedUpAt': _toIso(data?['lookedUpAt']),
-          '__localKey': doc.id,
         };
 
         await _box.put(doc.id, map);
         if (mounted) setState(() {});
       }
-    }, onError: (_) {
-      // rely on cache
     });
   }
 
@@ -96,36 +96,49 @@ class _HistoryPageState extends State<HistoryPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Clear history?'),
-        content: Text('Are you sure you want to delete all history?'),
+        backgroundColor: AppColors.background,
+        title: Text('Clear history',
+            style: TextStyle(
+                color: AppColors.textForBackground(AppColors.background))),
+        content: Text('Are you sure you want to delete all history?',
+            style: TextStyle(
+                color: AppColors.textForBackground(AppColors.background))),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text('Cancel')),
+              child:
+                  Text('Cancel', style: TextStyle(color: AppColors.learning))),
           TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: Text('Delete')),
+              child: Text('Delete', style: TextStyle(color: Colors.redAccent))),
         ],
       ),
     );
 
     if (confirm != true) return;
 
-    // Delete remote and local
     final batch = _firestore.batch();
     final snapshot = await _firestore
         .collection('users')
         .doc(user.uid)
         .collection('history')
         .get();
-    for (var doc in snapshot.docs) batch.delete(doc.reference);
-    await batch.commit();
 
+    for (var doc in snapshot.docs) {
+      batch.delete(doc.reference);
+    }
+
+    await batch.commit();
     await _box.clear();
 
-    if (mounted)
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('History cleared')));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.learning,
+          content: Text('History cleared'),
+        ),
+      );
+    }
   }
 
   @override
@@ -141,10 +154,16 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   Widget build(BuildContext context) {
     final user = _auth.currentUser;
-    if (user == null)
-      return Center(child: Text('Please log in to see history.'));
+
+    if (user == null) {
+      return Center(
+        child: Text('Please log in to see history.',
+            style: TextStyle(color: AppColors.learning)),
+      );
+    }
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: _hiveReady
           ? ValueListenableBuilder(
               valueListenable: _box.listenable(),
@@ -154,74 +173,79 @@ class _HistoryPageState extends State<HistoryPage> {
                         (e as Map).cast<String, dynamic>()))
                     .toList();
 
-                // sort newest-first by lookedUpAt
                 all.sort((a, b) {
-                  DateTime pa;
-                  DateTime pb;
-                  try {
-                    pa = DateTime.parse(
-                        a['lookedUpAt'] ?? DateTime(2000).toIso8601String());
-                  } catch (_) {
-                    pa = DateTime(2000);
-                  }
-                  try {
-                    pb = DateTime.parse(
-                        b['lookedUpAt'] ?? DateTime(2000).toIso8601String());
-                  } catch (_) {
-                    pb = DateTime(2000);
-                  }
+                  final pa = DateTime.tryParse(a['lookedUpAt'] ?? '') ??
+                      DateTime(2000);
+                  final pb = DateTime.tryParse(b['lookedUpAt'] ?? '') ??
+                      DateTime(2000);
                   return pb.compareTo(pa);
                 });
 
                 if (all.isEmpty) {
                   return Center(
-                      child: Text('No history yet.',
-                          style: TextStyle(
-                              fontSize: 16, color: Colors.grey[700])));
+                    child: Text(
+                      'No history yet.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color:
+                            AppColors.textForBackground(AppColors.background),
+                      ),
+                    ),
+                  );
                 }
 
                 return ListView.builder(
-                  padding: EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
                   itemCount: all.length,
                   itemBuilder: (context, index) {
                     final item = all[index];
                     final word = item['word'] ?? '';
+
                     return InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => DefinitionPage(word: word))),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DefinitionPage(word: word),
+                        ),
+                      ),
                       child: Container(
-                        padding:
-                            EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                        margin: EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 12, horizontal: 16),
+                        margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                              colors: [Colors.deepPurple, Color(0xFFC940FB)]),
+                          color: AppColors.heatHigh.withOpacity(0.85),
                           borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
+                          boxShadow: const [
                             BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 4,
-                                offset: Offset(0, 2))
+                              color: Colors.black12,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            )
                           ],
                         ),
-                        child: Text(word,
-                            style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white)),
+                        child: Text(
+                          word,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     );
                   },
                 );
               },
             )
-          : Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
+          : Center(
+              child: CircularProgressIndicator(
+                color: AppColors.learning,
+              ),
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: _clearHistory,
-        backgroundColor: Colors.deepPurple,
-        child: Icon(Icons.delete, color: Colors.white),
-        tooltip: 'Clear history',
+        backgroundColor: AppColors.known,
+        child: const Icon(Icons.delete, color: Colors.white),
       ),
     );
   }

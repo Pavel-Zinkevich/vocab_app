@@ -11,16 +11,15 @@ import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/email_verification_page.dart';
 
+import 'theme/app_colors.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize Hive once at startup and open the cache box. Box name
-  // must match what the app tabs expect ('vocab').
   await Hive.initFlutter();
   await Hive.openBox('vocab');
 
@@ -36,26 +35,33 @@ class VocabApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
+          seedColor: AppColors.learning,
           brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: Colors.grey[100],
+        scaffoldBackgroundColor: AppColors.background,
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.deepPurple,
-          foregroundColor: Colors.white,
-          elevation: 4,
+          backgroundColor: AppColors.navBar,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
           centerTitle: true,
+          iconTheme: IconThemeData(color: AppColors.navBarIcon),
+          titleTextStyle: TextStyle(
+            color: AppColors.navBarText,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          backgroundColor: Colors.white,
-          selectedItemColor: Colors.deepPurple,
-          unselectedItemColor: Colors.grey,
+          backgroundColor: AppColors.navBar,
+          selectedItemColor: AppColors.learning,
+          unselectedItemColor: AppColors.navBarIcon.withOpacity(0.5),
           showUnselectedLabels: true,
-          elevation: 10,
+          elevation: 8,
           type: BottomNavigationBarType.fixed,
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: Colors.deepPurple,
+          backgroundColor: AppColors.learning,
+          foregroundColor: Colors.white,
           elevation: 6,
         ),
       ),
@@ -68,30 +74,30 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      // Use userChanges() so profile updates (like emailVerified after reload)
-      // cause the AuthGate to rebuild and navigate appropriately.
       stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
+            backgroundColor: AppColors.background,
             body: Center(
               child: CircularProgressIndicator(
-                color: Colors.deepPurple,
+                color: AppColors.learning,
               ),
             ),
           );
         }
 
         final user = snapshot.data;
+
         if (user == null) {
           return LoginPage();
-        } else {
-          // If the user's email is not verified, show verification page first.
-          if (!user.emailVerified) {
-            return EmailVerificationPage();
-          }
-          return HomePage();
         }
+
+        if (!user.emailVerified) {
+          return EmailVerificationPage();
+        }
+
+        return HomePage();
       },
     );
   }
@@ -114,29 +120,41 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        body: IndexedStack(index: _currentIndex, children: _pages),
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 10,
-              ),
-            ],
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (i) => setState(() => _currentIndex = i),
-            items: [
-              BottomNavigationBarItem(
-                  icon: Icon(Icons.book), label: 'Vocabulary'),
-              BottomNavigationBarItem(
-                  icon: Icon(Icons.school), label: 'Training'),
-              BottomNavigationBarItem(
-                  icon: Icon(Icons.person), label: 'Profile'),
-            ],
-          ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+            ),
+          ],
         ),
-        floatingActionButton: null);
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (i) => setState(() => _currentIndex = i),
+          backgroundColor: AppColors.navBar,
+          selectedItemColor: AppColors.learning,
+          unselectedItemColor: AppColors.navBarIcon.withOpacity(0.6),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.book),
+              label: 'Vocabulary',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.school),
+              label: 'Training',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

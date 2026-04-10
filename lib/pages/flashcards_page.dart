@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_colors.dart';
 
 class FlashcardsPage extends StatefulWidget {
   @override
@@ -78,7 +79,6 @@ class _FlashcardsPageState extends State<FlashcardsPage>
       _words = words;
       _initialWordCount = words.length;
       _isLoading = false;
-
       _pickRandomWord();
     });
   }
@@ -131,80 +131,68 @@ class _FlashcardsPageState extends State<FlashcardsPage>
 
     if (knewIt) {
       step++;
-
-      final status = getStatus(step);
-
-      await docRef.update({
-        'step': step,
-        'status': status,
-        'nextReview': Timestamp.fromDate(
-          step >= _intervals.length
-              ? DateTime.now().add(Duration(days: 30))
-              : DateTime.now()
-                  .add(_intervals[min(step, _intervals.length - 1)]),
-        ),
-        'updatedAt': Timestamp.now(),
-      });
     } else {
       step = max(0, step - 1);
-
-      final status = getStatus(step);
-
-      await docRef.update({
-        'step': step,
-        'status': status,
-        'nextReview': Timestamp.fromDate(
-          DateTime.now().add(_intervals[min(step, _intervals.length - 1)]),
-        ),
-        'updatedAt': Timestamp.now(),
-      });
     }
 
+    final status = getStatus(step);
+
+    await docRef.update({
+      'step': step,
+      'status': status,
+      'nextReview': Timestamp.fromDate(
+        DateTime.now().add(
+          _intervals[min(step, _intervals.length - 1)],
+        ),
+      ),
+      'updatedAt': Timestamp.now(),
+    });
+
     setState(() {
-      final index = _words.indexWhere((w) => w['id'] == _currentWord!['id']);
-
-      if (index != -1) {
-        _words[index]['step'] = step;
-
-        String status;
-
-        if (step >= _intervals.length) {
-          status = 'learned';
-        } else if (step >= 2) {
-          status = 'known';
-        } else {
-          status = 'learning';
-        }
-
-        _words[index]['status'] = status;
-
-        _words[index]['nextReview'] = status == 'learned'
-            ? DateTime.now().add(Duration(days: 30))
-            : DateTime.now().add(_intervals[min(step, _intervals.length - 1)]);
-      }
-
       _words.removeWhere((w) => w['id'] == _currentWord!['id']);
       _pickRandomWord();
     });
   }
 
+  Color _cardColor() {
+    final status = _currentWord?['status'] ?? 'learning';
+
+    switch (status) {
+      case 'known':
+        return AppColors.known;
+      case 'learned':
+        return AppColors.learned;
+      default:
+        return AppColors.learning;
+    }
+  }
+
   Widget _buildCard(String text) {
+    final bg = _cardColor();
+
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 24),
       height: 250,
       decoration: BoxDecoration(
-        color: Colors.deepPurple,
+        color: bg,
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          )
+        ],
       ),
       child: Center(
         child: Text(
           text,
+          textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.textForBackground(bg),
             fontSize: 28,
             fontWeight: FontWeight.bold,
           ),
-          textAlign: TextAlign.center,
         ),
       ),
     );
@@ -218,40 +206,81 @@ class _FlashcardsPageState extends State<FlashcardsPage>
 
   @override
   Widget build(BuildContext context) {
+    final bg = AppColors.background;
+
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: Text("Flashcards")),
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: bg,
+        appBar: AppBar(
+          backgroundColor: bg,
+          elevation: 0,
+          title: Text("Flashcards",
+              style: TextStyle(color: AppColors.textForBackground(bg))),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.learning),
+        ),
       );
     }
 
     if (_initialWordCount == 0) {
       return Scaffold(
-        appBar: AppBar(title: Text("Flashcards")),
-        body: Center(child: Text("No words yet")),
+        backgroundColor: bg,
+        appBar: AppBar(
+          backgroundColor: bg,
+          elevation: 0,
+          title: Text("Flashcards",
+              style: TextStyle(color: AppColors.textForBackground(bg))),
+        ),
+        body: Center(
+          child: Text("No words yet",
+              style: TextStyle(color: AppColors.textForBackground(bg))),
+        ),
       );
     }
 
     if (_currentWord == null) {
       return Scaffold(
-        appBar: AppBar(title: Text("Flashcards")),
+        backgroundColor: bg,
+        appBar: AppBar(
+          backgroundColor: bg,
+          elevation: 0,
+          title: Text("Flashcards",
+              style: TextStyle(color: AppColors.textForBackground(bg))),
+        ),
         body: Center(
-          child: Text("No words to review right now 🎉"),
+          child: Text(
+            "No words to review right now 🎉",
+            style: TextStyle(
+              color: AppColors.textForBackground(bg),
+            ),
+          ),
         ),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text("Flashcards")),
+      backgroundColor: bg,
+      appBar: AppBar(
+        backgroundColor: bg,
+        elevation: 0,
+        title: Text(
+          "Flashcards",
+          style: TextStyle(
+            color: AppColors.textForBackground(bg),
+          ),
+        ),
+      ),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           GestureDetector(
             onTap: () {
-              if (_controller.isCompleted)
+              if (_controller.isCompleted) {
                 _controller.reverse();
-              else
+              } else {
                 _controller.forward();
+              }
 
               Future.delayed(Duration(milliseconds: 200), () {
                 setState(() {
@@ -269,6 +298,7 @@ class _FlashcardsPageState extends State<FlashcardsPage>
                 animation: _animation,
                 builder: (context, child) {
                   final isUnder = (_animation.value > pi / 2);
+
                   return Transform(
                     transform: Matrix4.identity()
                       ..setEntry(3, 2, 0.001)
@@ -278,8 +308,9 @@ class _FlashcardsPageState extends State<FlashcardsPage>
                         ? Transform(
                             alignment: Alignment.center,
                             transform: Matrix4.rotationY(pi),
-                            child:
-                                _buildCard(_currentWord!['translation'] ?? ''),
+                            child: _buildCard(
+                              _currentWord!['translation'] ?? '',
+                            ),
                           )
                         : _buildCard(_currentWord!['word'] ?? ''),
                   );
@@ -288,9 +319,17 @@ class _FlashcardsPageState extends State<FlashcardsPage>
             ),
           ),
           SizedBox(height: 20),
-          Text("Tap to flip"),
+          Text(
+            "Tap to flip",
+            style: TextStyle(color: AppColors.learning),
+          ),
           SizedBox(height: 10),
-          Text("Swipe left = knew it | right = didn’t"),
+          Text(
+            "Swipe left = knew it | right = didn’t",
+            style: TextStyle(
+              color: AppColors.textForBackground(bg),
+            ),
+          ),
         ],
       ),
     );
