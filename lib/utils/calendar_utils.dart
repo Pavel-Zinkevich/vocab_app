@@ -3,12 +3,73 @@ import '../pages/words_added_page.dart';
 
 Color getColor(int count, int maxCount) {
   if (count == 0) return Colors.grey[200]!;
-  final intensity = count / maxCount;
-  return Color.lerp(
-    Colors.green[200],
-    const Color.fromARGB(255, 73, 96, 165),
-    intensity,
-  )!;
+
+  final ratio = count / maxCount;
+
+  if (ratio < 0.25) return Color(0xFFB2DFDB);
+  if (ratio < 0.5) return Color(0xFF80CBC4);
+  if (ratio < 0.75) return Color(0xFF4DB6AC);
+  return Color(0xFF26A69A);
+}
+
+Widget buildLegend(int maxCount, BuildContext context) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      GestureDetector(
+        onTap: () {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: Text("How we count words"),
+              content: Text(
+                "Each square shows how many words you added that day.",
+              ),
+            ),
+          );
+        },
+        child: Text(
+          "Learn how we count words",
+          style: TextStyle(
+            color: Colors.blue,
+          ),
+        ),
+      ),
+      Row(
+        children: [
+          Text("Less"),
+          SizedBox(width: 8),
+          Row(
+            children: List.generate(5, (index) {
+              final value = ((index + 1) / 5) * maxCount;
+
+              return Container(
+                width: 14,
+                height: 14,
+                margin: EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  color: getColor(value.toInt(), maxCount), // ✅ FIXED
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.black12),
+                  boxShadow: value > 0
+                      ? [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 2,
+                            offset: Offset(1, 1),
+                          ),
+                        ]
+                      : [],
+                ),
+              );
+            }),
+          ),
+          SizedBox(width: 8),
+          Text("More"),
+        ],
+      ),
+    ],
+  );
 }
 
 Widget buildMonthGrid(

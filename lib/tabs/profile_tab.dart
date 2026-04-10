@@ -87,6 +87,9 @@ class _ProfileTabState extends State<ProfileTab>
                     child: CircularProgressIndicator(color: Colors.deepPurple));
               }
               final data = snapshot.data!;
+              final maxCount = data.values.isEmpty
+                  ? 1
+                  : data.values.reduce((a, b) => a > b ? a : b);
               return Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -96,13 +99,28 @@ class _ProfileTabState extends State<ProfileTab>
                         style: TextStyle(
                             fontSize: 20, fontWeight: FontWeight.bold)),
                     SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => CalendarPage(data: data))),
-                      child: buildMonthGrid(DateTime.now().year,
-                          DateTime.now().month, data, context),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CalendarPage(data: data),
+                            ),
+                          ),
+                          child: buildMonthGrid(
+                            DateTime.now().year,
+                            DateTime.now().month,
+                            data,
+                            context,
+                          ),
+                        ),
+
+                        SizedBox(height: 12),
+
+                        buildLegend(maxCount, context), // ✅ ADD THIS
+                      ],
                     ),
                   ],
                 ),
