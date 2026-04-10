@@ -29,8 +29,7 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     Duration(hours: 12),
     Duration(days: 1),
     Duration(days: 2),
-    Duration(days: 4),
-    Duration(days: 8),
+    Duration(days: 5),
   ];
 
   @override
@@ -45,6 +44,12 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     _animation = Tween<double>(begin: 0, end: pi).animate(_controller);
 
     _loadWords();
+  }
+
+  String getStatus(int step) {
+    if (step >= _intervals.length) return 'learned';
+    if (step >= 2) return 'known';
+    return 'learning';
   }
 
   Future<void> _loadWords() async {
@@ -127,40 +132,58 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     if (knewIt) {
       step++;
 
-      if (step >= _intervals.length) {
-        await docRef.update({
-          'step': step,
-          'status': 'learned',
-          'nextReview': Timestamp.fromDate(
-            DateTime.now().add(Duration(days: 30)),
-          ),
-          'updatedAt': Timestamp.now(),
-        });
-      } else {
-        await docRef.update({
-          'step': step,
-          'status': 'learning',
-          'nextReview': Timestamp.fromDate(
-            DateTime.now().add(_intervals[step]),
-          ),
-          'updatedAt': Timestamp.now(),
-        });
-      }
-    } else {
-      step = max(0, step - 1);
+      final status = getStatus(step);
 
       await docRef.update({
         'step': step,
-        'status': 'learning',
+        'status': status,
         'nextReview': Timestamp.fromDate(
-          DateTime.now().add(_intervals[step]),
+          step >= _intervals.length
+              ? DateTime.now().add(Duration(days: 30))
+              : DateTime.now()
+                  .add(_intervals[min(step, _intervals.length - 1)]),
+        ),
+        'updatedAt': Timestamp.now(),
+      });
+    } else {
+      step = max(0, step - 1);
+
+      final status = getStatus(step);
+
+      await docRef.update({
+        'step': step,
+        'status': status,
+        'nextReview': Timestamp.fromDate(
+          DateTime.now().add(_intervals[min(step, _intervals.length - 1)]),
         ),
         'updatedAt': Timestamp.now(),
       });
     }
 
     setState(() {
-      _words.remove(_currentWord);
+      final index = _words.indexWhere((w) => w['id'] == _currentWord!['id']);
+
+      if (index != -1) {
+        _words[index]['step'] = step;
+
+        String status;
+
+        if (step >= _intervals.length) {
+          status = 'learned';
+        } else if (step >= 2) {
+          status = 'known';
+        } else {
+          status = 'learning';
+        }
+
+        _words[index]['status'] = status;
+
+        _words[index]['nextReview'] = status == 'learned'
+            ? DateTime.now().add(Duration(days: 30))
+            : DateTime.now().add(_intervals[min(step, _intervals.length - 1)]);
+      }
+
+      _words.removeWhere((w) => w['id'] == _currentWord!['id']);
       _pickRandomWord();
     });
   }

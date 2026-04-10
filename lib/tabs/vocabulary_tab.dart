@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:async';
 import '../pages/definition_page.dart';
+import '../theme/app_colors.dart';
 
 /// VocabularyTab
 ///
@@ -557,22 +558,16 @@ class _VocabularyTabState extends State<VocabularyTab> {
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 70),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final item = filtered[index];
 
-                    Color bgColor;
-                    switch (item['status'] ?? 'uncategorized') {
-                      case 'known':
-                        bgColor = Colors.green;
-                        break;
-                      case 'unknown':
-                        bgColor = const Color.fromARGB(255, 194, 94, 87);
-                        break;
-                      default:
-                        bgColor = Colors.white;
-                    }
+                    final bgColor =
+                        AppColors.fromStatus(item['status'] ?? 'learning');
+
+                    final textColor = AppColors.textForBackground(bgColor);
+                    final subTextColor = textColor.withOpacity(0.7);
 
                     final displayWord = item['word'] ?? '';
                     final displayTranslation = item['translation'] ?? '';
@@ -608,12 +603,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                     child: Text(
                                       '$displayWord - $displayTranslation',
                                       style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: bgColor == Colors.white
-                                            ? Colors.black
-                                            : Colors.white,
-                                      ),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: textColor),
                                     ),
                                   ),
                                   Container(
@@ -625,15 +617,16 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                           const Color.fromARGB(58, 46, 35, 35),
                                     ),
                                     child: IconButton(
-                                      icon: Icon(Icons.edit,
-                                          color: bgColor == Colors.white
-                                              ? Colors.black54
-                                              : Colors.white70),
+                                      icon: Icon(
+                                        Icons.edit,
+                                        color: subTextColor,
+                                      ),
                                       onPressed: () => _showEditWordDialog(
-                                          item['__localKey'] ??
-                                              item['remoteId'] ??
-                                              '',
-                                          item),
+                                        item['__localKey'] ??
+                                            item['remoteId'] ??
+                                            '',
+                                        item,
+                                      ),
                                     ),
                                   ),
                                   SizedBox(width: 8),
@@ -660,11 +653,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                               if ((item['context'] ?? '').isNotEmpty)
                                 Text(
                                   item['context'] ?? '',
-                                  style: TextStyle(
-                                    color: bgColor == Colors.white
-                                        ? Colors.black54
-                                        : Colors.white70,
-                                  ),
+                                  style: TextStyle(color: subTextColor),
                                 ),
                             ],
                           ),
