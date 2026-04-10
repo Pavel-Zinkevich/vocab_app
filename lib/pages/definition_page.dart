@@ -121,7 +121,14 @@ class _DefinitionPageState extends State<DefinitionPage> {
         'word': _cleanTranslation(sense.french),
         'translation': _cleanTranslation(sense.translation),
         'context': sense.frExamples.isNotEmpty ? sense.frExamples.first : '',
+
+        // ✅ SRS fields (CRITICAL)
+        'status': 'learning',
+        'step': 0,
+        'nextReview': FieldValue.serverTimestamp(), // due immediately
+
         'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;

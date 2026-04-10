@@ -17,9 +17,21 @@ class _FlashcardsPageState extends State<FlashcardsPage>
   Map<String, dynamic>? _currentWord;
 
   bool _showTranslation = false;
+  bool _isLoading = true;
+  int _initialWordCount = 0;
 
   late AnimationController _controller;
   late Animation<double> _animation;
+
+  final List<Duration> _intervals = [
+    Duration(hours: 3),
+    Duration(hours: 6),
+    Duration(hours: 12),
+    Duration(days: 1),
+    Duration(days: 2),
+    Duration(days: 4),
+    Duration(days: 8),
+  ];
 
   @override
   void initState() {
@@ -47,20 +59,22 @@ class _FlashcardsPageState extends State<FlashcardsPage>
 
     final words = snapshot.docs.map((doc) {
       final data = doc.data();
+
       return {
+        'id': doc.id,
         ...data,
-        'status': data['status'] ?? 'uncategorized',
+        'status': data['status'] ?? 'learning',
+        'step': data['step'] ?? 0,
+        'nextReview': data['nextReview'],
       };
     }).toList();
 
     setState(() {
       _words = words;
-      _isLoading = false;
       _initialWordCount = words.length;
+      _isLoading = false;
 
-      if (_words.isNotEmpty) {
-        _pickRandomWord();
-      }
+      _pickRandomWord();
     });
   }
 
@@ -70,73 +84,85 @@ class _FlashcardsPageState extends State<FlashcardsPage>
       return;
     }
 
+    final now = DateTime.now();
     final random = Random();
 
-    // Separate words by status
-    final unknownOrUncategorized = _words
-        .where(
-            (w) => w['status'] == 'unknown' || w['status'] == 'uncategorized')
-        .toList();
-
-    final knownWords = _words.where((w) => w['status'] == 'known').toList();
-
-    if (unknownOrUncategorized.isNotEmpty) {
-      // Most of the time pick unknown/uncategorized
-      _currentWord =
-          unknownOrUncategorized[random.nextInt(unknownOrUncategorized.length)];
-    } else if (knownWords.isNotEmpty) {
-      // All unknown/uncategorized done → 20% chance to pick a known word
-      if (random.nextDouble() < 0.2) {
-        _currentWord = knownWords[random.nextInt(knownWords.length)];
-      } else {
-        // End of training session
-        _currentWord = null;
+    final dueWords = _words.where((w) {
+      DateTime? next;
+      if (w['nextReview'] is Timestamp) {
+        next = (w['nextReview'] as Timestamp).toDate();
+      } else if (w['nextReview'] is String) {
+        next = DateTime.tryParse(w['nextReview']);
       }
+      return next == null || next.isBefore(now);
+    }).toList();
+
+    final learnedWords = _words.where((w) => w['status'] == 'learned').toList();
+
+    if (dueWords.isNotEmpty) {
+      _currentWord = dueWords[random.nextInt(dueWords.length)];
+    } else if (learnedWords.isNotEmpty && random.nextDouble() < 0.2) {
+      _currentWord = learnedWords[random.nextInt(learnedWords.length)];
     } else {
-      // No words left at all
       _currentWord = null;
     }
 
     _showTranslation = false;
   }
 
-  void _handleSwipe(bool knewIt) async {
+  Future<void> _handleSwipe(bool knewIt) async {
     if (_currentWord == null) return;
 
     final user = _auth.currentUser;
-    if (user != null) {
-      final wordDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('vocabulary')
-          .where('word', isEqualTo: _currentWord!['word'])
-          .limit(1)
-          .get();
+    if (user == null) return;
 
-      if (wordDoc.docs.isNotEmpty) {
-        await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .collection('vocabulary')
-            .doc(wordDoc.docs.first.id)
-            .update({'status': knewIt ? 'known' : 'unknown'});
+    final docRef = _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('vocabulary')
+        .doc(_currentWord!['id']);
+
+    int step = _currentWord!['step'] ?? 0;
+
+    if (knewIt) {
+      step++;
+
+      if (step >= _intervals.length) {
+        await docRef.update({
+          'step': step,
+          'status': 'learned',
+          'nextReview': Timestamp.fromDate(
+            DateTime.now().add(Duration(days: 30)),
+          ),
+          'updatedAt': Timestamp.now(),
+        });
+      } else {
+        await docRef.update({
+          'step': step,
+          'status': 'learning',
+          'nextReview': Timestamp.fromDate(
+            DateTime.now().add(_intervals[step]),
+          ),
+          'updatedAt': Timestamp.now(),
+        });
       }
+    } else {
+      step = max(0, step - 1);
+
+      await docRef.update({
+        'step': step,
+        'status': 'learning',
+        'nextReview': Timestamp.fromDate(
+          DateTime.now().add(_intervals[step]),
+        ),
+        'updatedAt': Timestamp.now(),
+      });
     }
 
     setState(() {
       _words.remove(_currentWord);
-      if (_words.isEmpty) {
-        _currentWord = null;
-      } else {
-        _pickRandomWord();
-      }
+      _pickRandomWord();
     });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 
   Widget _buildCard(String text) {
@@ -161,148 +187,87 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     );
   }
 
-  bool _isLoading = true;
-  int _initialWordCount = 0;
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 🟡 Loading
     if (_isLoading) {
       return Scaffold(
-        floatingActionButton: null,
         appBar: AppBar(title: Text("Flashcards")),
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // ❌ No words in vocabulary at all
     if (_initialWordCount == 0) {
       return Scaffold(
         appBar: AppBar(title: Text("Flashcards")),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.menu_book, size: 80, color: Colors.grey),
-                SizedBox(height: 20),
-                Text(
-                  "No words yet",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 12),
-                Text(
-                  "Your vocabulary is empty.\nAdd words to start training.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-                ),
-              ],
-            ),
-          ),
-        ),
+        body: Center(child: Text("No words yet")),
       );
     }
-
-    // 🎉 Finished training session
 
     if (_currentWord == null) {
       return Scaffold(
-        appBar: AppBar(title: Text("Flashcards")), // Keeps the navbar
-        backgroundColor: Colors.white, // Optional: set your background
+        appBar: AppBar(title: Text("Flashcards")),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.emoji_events, size: 80, color: Colors.deepPurple),
-              SizedBox(height: 20),
-              Text(
-                "Congratulations 🎉",
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple, // Match your theme
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                "You reviewed all words!",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-              ),
-              SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text("Back"),
-              ),
-            ],
-          ),
+          child: Text("No words to review right now 🎉"),
         ),
       );
     }
 
-    // ✅ Normal training UI
     return Scaffold(
       appBar: AppBar(title: Text("Flashcards")),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           GestureDetector(
-            onTap: _currentWord == null
-                ? null
-                : () {
-                    if (_controller.isCompleted)
-                      _controller.reverse();
-                    else
-                      _controller.forward();
+            onTap: () {
+              if (_controller.isCompleted)
+                _controller.reverse();
+              else
+                _controller.forward();
 
-                    Future.delayed(Duration(milliseconds: 200), () {
-                      setState(() {
-                        _showTranslation = !_showTranslation;
-                      });
-                    });
-                  },
-            child: _currentWord == null
-                ? SizedBox.shrink() // No card
-                : Dismissible(
-                    key: ValueKey(_currentWord!['word']),
-                    direction: DismissDirection.horizontal,
-                    onDismissed: (direction) {
-                      _handleSwipe(direction == DismissDirection.endToStart);
-                    },
-                    child: AnimatedBuilder(
-                      animation: _animation,
-                      builder: (context, child) {
-                        final isUnder = (_animation.value > pi / 2);
-                        return Transform(
-                          transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.001)
-                            ..rotateY(_animation.value),
-                          alignment: Alignment.center,
-                          child: isUnder
-                              ? Transform(
-                                  alignment: Alignment.center,
-                                  transform: Matrix4.rotationY(pi),
-                                  child: _buildCard(
-                                      _currentWord!['translation'] ?? ''),
-                                )
-                              : _buildCard(_currentWord!['word'] ?? ''),
-                        );
-                      },
-                    ),
-                  ),
+              Future.delayed(Duration(milliseconds: 200), () {
+                setState(() {
+                  _showTranslation = !_showTranslation;
+                });
+              });
+            },
+            child: Dismissible(
+              key: ValueKey(_currentWord!['id']),
+              direction: DismissDirection.horizontal,
+              onDismissed: (direction) {
+                _handleSwipe(direction == DismissDirection.endToStart);
+              },
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, child) {
+                  final isUnder = (_animation.value > pi / 2);
+                  return Transform(
+                    transform: Matrix4.identity()
+                      ..setEntry(3, 2, 0.001)
+                      ..rotateY(_animation.value),
+                    alignment: Alignment.center,
+                    child: isUnder
+                        ? Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.rotationY(pi),
+                            child:
+                                _buildCard(_currentWord!['translation'] ?? ''),
+                          )
+                        : _buildCard(_currentWord!['word'] ?? ''),
+                  );
+                },
+              ),
+            ),
           ),
-          SizedBox(height: 24),
-          Text("Tap card to flip", style: TextStyle(color: Colors.grey)),
-          SizedBox(height: 8),
-          Text(
-            "Swipe left = you know it\nSwipe right = you don’t",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[700]),
-          ),
+          SizedBox(height: 20),
+          Text("Tap to flip"),
+          SizedBox(height: 10),
+          Text("Swipe left = knew it | right = didn’t"),
         ],
       ),
     );

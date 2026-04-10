@@ -84,13 +84,16 @@ class _VocabularyTabState extends State<VocabularyTab> {
   void _startFirestoreListenerForCurrentUser() {
     final user = _auth.currentUser;
     if (user == null) return;
+
     final coll =
         _firestore.collection('users').doc(user.uid).collection('vocabulary');
 
     _firestoreSub?.cancel();
+
     _firestoreSub = coll.snapshots().listen((snapshot) async {
       for (final change in snapshot.docChanges) {
         final doc = change.doc;
+
         if (change.type == DocumentChangeType.removed) {
           await _box.delete(doc.id);
           if (mounted) setState(() {});
@@ -98,9 +101,10 @@ class _VocabularyTabState extends State<VocabularyTab> {
         }
 
         final data = doc.data();
-        // Convert createdAt/updatedAt to ISO strings to keep Hive serializable
+
         final createdAtIso =
             parseCreatedAt(data?['createdAt']).toIso8601String();
+
         final updatedAtIso =
             parseCreatedAt(data?['updatedAt']).toIso8601String();
 
@@ -108,7 +112,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
           'word': data?['word'] ?? '',
           'translation': data?['translation'] ?? '',
           'context': data?['context'] ?? '',
-          'status': data?['status'] ?? 'uncategorized',
+          'status': data?['status'] ?? 'learning',
+          'step': data?['step'] ?? 0,
+          'nextReview': data?['nextReview'] != null
+              ? (data!['nextReview'] as Timestamp).toDate().toIso8601String()
+              : null,
           'remoteId': doc.id,
           '__localKey': doc.id,
           'pending': false,
@@ -120,73 +128,76 @@ class _VocabularyTabState extends State<VocabularyTab> {
         final raw = _box.get(doc.id);
         final existing =
             raw != null ? Map<String, dynamic>.from(raw as Map) : null;
+
         if (existing == null || existing['pending'] != true) {
           await _box.put(doc.id, map);
           if (mounted) setState(() {});
         }
       }
-    }, onError: (_) {
-      // ignore — rely on cache and background sync
     });
   }
 
   Future<void> _syncPendingItems() async {
     final user = _auth.currentUser;
     if (user == null) return;
+
     final coll =
         _firestore.collection('users').doc(user.uid).collection('vocabulary');
 
     for (final key in _box.keys) {
       final raw = _box.get(key);
       if (raw == null) continue;
-      final v = Map<String, dynamic>.from(raw as Map);
 
-      // Handle local deletions
+      final v = Map<String, dynamic>.from(raw);
+
       if (v['deleted'] == true) {
         final remoteId = v['remoteId'];
         if (remoteId != null) {
-          try {
-            await coll.doc(remoteId).delete();
-            await _box.delete(key);
-          } catch (_) {}
-        } else {
-          await _box.delete(key);
+          await coll.doc(remoteId).delete();
         }
+        await _box.delete(key);
         continue;
       }
 
       if (v['pending'] == true) {
-        final remoteId = v['remoteId'];
+        DateTime? nextReviewDate;
+
+        final nr = v['nextReview'];
+        if (nr is String) {
+          nextReviewDate = DateTime.tryParse(nr);
+        }
+
         final payload = {
           'word': v['word'] ?? '',
           'translation': v['translation'] ?? '',
           'context': v['context'] ?? '',
-          'status': v['status'] ?? 'uncategorized',
+          'status': v['status'] ?? 'learning',
+          'step': v['step'] ?? 0,
+          'nextReview': nextReviewDate != null
+              ? Timestamp.fromDate(nextReviewDate)
+              : FieldValue.serverTimestamp(),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
-        try {
-          if (remoteId == null) {
-            final docRef = await coll.add(payload);
-            final newKey = docRef.id;
-            final remoteMap = Map<String, dynamic>.from(v);
-            remoteMap['remoteId'] = newKey;
-            remoteMap['__localKey'] = newKey;
-            remoteMap['pending'] = false;
-            await _box.put(newKey, remoteMap);
-            await _box.delete(key);
-            if (mounted) setState(() {});
-          } else {
-            await coll.doc(remoteId).set(payload, SetOptions(merge: true));
-            final updated = Map<String, dynamic>.from(v);
-            updated['pending'] = false;
-            updated['updatedAt'] = DateTime.now().toIso8601String();
-            await _box.put(key, updated);
-            if (mounted) setState(() {});
-          }
-        } catch (_) {
-          // ignore and retry later
+        final remoteId = v['remoteId'];
+
+        if (remoteId == null) {
+          final docRef = await coll.add(payload);
+
+          final newMap = Map<String, dynamic>.from(v);
+          newMap['remoteId'] = docRef.id;
+          newMap['pending'] = false;
+
+          await _box.put(docRef.id, newMap);
+          await _box.delete(key);
+        } else {
+          await coll.doc(remoteId).set(payload, SetOptions(merge: true));
+
+          v['pending'] = false;
+          v['updatedAt'] = DateTime.now().toIso8601String();
+
+          await _box.put(key, v);
         }
       }
     }
@@ -211,7 +222,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
         'word': word,
         'translation': translationController.text.trim(),
         'context': contextController.text.trim(),
-        'status': 'uncategorized',
+        'status': 'learning',
+        'step': 0,
+        'nextReview': now.toIso8601String(),
         'pending': true,
         'deleted': false,
         'createdAt': now.toIso8601String(),
@@ -278,7 +291,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
           'word': word,
           'translation': translationController.text.trim(),
           'context': contextController.text.trim(),
-          'status': 'uncategorized',
+          'status': 'learning',
+          'step': 0,
+          'nextReview': DateTime.now().toIso8601String(),
           'pending': true,
           'deleted': false,
           'createdAt': DateTime.now().toIso8601String(),
@@ -292,6 +307,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
         updated['context'] = contextController.text.trim();
         updated['pending'] = true;
         updated['updatedAt'] = DateTime.now().toIso8601String();
+        updated['step'] = v['step'] ?? 0;
+        updated['nextReview'] = v['nextReview'];
+        updated['status'] = v['status'] ?? 'learning';
         await _box.put(docId, updated);
       }
 
@@ -340,38 +358,23 @@ class _VocabularyTabState extends State<VocabularyTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Look up a word'),
+          title: const Text('Look up a word'),
           content: TextField(
             controller: lookupController,
-            decoration: InputDecoration(hintText: 'Enter word'),
+            decoration: const InputDecoration(hintText: 'Enter word'),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
                 final word = lookupController.text.trim();
                 if (word.isEmpty) return;
 
-                // --- 1. Добавляем сразу в Hive ---
-                final localKey =
-                    'local_${DateTime.now().millisecondsSinceEpoch}';
-                final nowIso = DateTime.now().toUtc().toIso8601String();
-
-                await _box.put(localKey, {
-                  'word': word,
-                  'lookedUpAt': nowIso,
-                  '__localKey': localKey,
-                  'pending': true, // пометка для синхронизации
-                });
-
-                if (mounted) setState(() {});
-
                 Navigator.pop(context);
 
-                // --- 2. Переходим на страницу определения ---
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -379,7 +382,6 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   ),
                 );
 
-                // --- 3. Асинхронная синхронизация с Firestore ---
                 final user = _auth.currentUser;
                 if (user != null) {
                   final historyRef = _firestore
@@ -388,36 +390,26 @@ class _VocabularyTabState extends State<VocabularyTab> {
                       .collection('history');
 
                   try {
-                    final docRef = await historyRef.add({
+                    await historyRef.add({
                       'word': word,
                       'lookedUpAt': FieldValue.serverTimestamp(),
                     });
 
-                    // После успешного добавления в Firestore обновляем Hive
-                    final raw = _box.get(localKey);
-                    if (raw != null) {
-                      final updated = Map<String, dynamic>.from(raw as Map);
-                      updated['pending'] = false;
-                      updated['__localKey'] = docRef.id;
-                      await _box.put(docRef.id, updated);
-                      await _box.delete(localKey);
-                    }
-
-                    // Ограничение истории до 100 элементов
                     final snapshot = await historyRef
                         .orderBy('lookedUpAt', descending: true)
                         .get();
+
                     if (snapshot.docs.length > 100) {
                       for (var doc in snapshot.docs.skip(100)) {
                         await historyRef.doc(doc.id).delete();
                       }
                     }
                   } catch (_) {
-                    // если нет интернета, оставляем pending = true и синхронизируем позже
+                    // offline safe
                   }
                 }
               },
-              child: Text('Look Up'),
+              child: const Text('Look Up'),
             ),
           ],
         );
@@ -483,10 +475,12 @@ class _VocabularyTabState extends State<VocabularyTab> {
   void dispose() {
     _firestoreSub?.cancel();
     _pendingSyncTimer?.cancel();
+
     if (Hive.isBoxOpen('vocab')) {
       _box.compact();
       _box.close();
     }
+
     super.dispose();
   }
 
