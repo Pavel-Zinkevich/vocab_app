@@ -1,21 +1,26 @@
 import 'package:flutter/material.dart';
 import '../pages/flashcards_page.dart';
-import '../theme/app_colors.dart';
+// migrated to Theme.of(context) colors
 
 class TrainingTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final bg = AppColors.background;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: AppColors.navBar,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??
+            Theme.of(context).colorScheme.surface,
         title: Text(
           "Training",
-          style: TextStyle(color: AppColors.navBarText),
+          style: TextStyle(
+              color: Theme.of(context).appBarTheme.titleTextStyle?.color ??
+                  Theme.of(context).colorScheme.onSurface),
         ),
-        iconTheme: IconThemeData(color: AppColors.navBarIcon),
+        iconTheme: IconThemeData(
+            color: Theme.of(context).appBarTheme.iconTheme?.color ??
+                Theme.of(context).colorScheme.onSurface),
       ),
       body: Center(
         child: GestureDetector(
@@ -29,7 +34,9 @@ class TrainingTab extends StatelessWidget {
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.learning,
+              color:
+                  Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                      Theme.of(context).colorScheme.primary,
               borderRadius: BorderRadius.circular(16),
               boxShadow: const [
                 BoxShadow(
@@ -44,15 +51,21 @@ class TrainingTab extends StatelessWidget {
               children: [
                 Icon(
                   Icons.style,
-                  color: Colors.white,
+                  color: Theme.of(context)
+                          .floatingActionButtonTheme
+                          .foregroundColor ??
+                      Theme.of(context).colorScheme.onPrimary,
                   size: 30,
                 ),
                 const SizedBox(width: 12),
                 Text(
                   "Flashcards",
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
-                    color: Colors.white,
+                    color: Theme.of(context)
+                            .floatingActionButtonTheme
+                            .foregroundColor ??
+                        Theme.of(context).colorScheme.onPrimary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

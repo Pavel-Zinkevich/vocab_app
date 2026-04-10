@@ -96,18 +96,20 @@ class _HistoryPageState extends State<HistoryPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).dialogTheme.backgroundColor ??
+            Theme.of(context).cardColor,
         title: Text('Clear history',
-            style: TextStyle(
-                color: AppColors.textForBackground(AppColors.background))),
+            style:
+                TextStyle(color: Theme.of(context).colorScheme.onBackground)),
         content: Text('Are you sure you want to delete all history?',
-            style: TextStyle(
-                color: AppColors.textForBackground(AppColors.background))),
+            style:
+                TextStyle(color: Theme.of(context).colorScheme.onBackground)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child:
-                  Text('Cancel', style: TextStyle(color: AppColors.learning))),
+              child: Text('Cancel',
+                  style:
+                      TextStyle(color: Theme.of(context).colorScheme.primary))),
           TextButton(
               onPressed: () => Navigator.pop(context, true),
               child: Text('Delete', style: TextStyle(color: Colors.redAccent))),
@@ -134,8 +136,15 @@ class _HistoryPageState extends State<HistoryPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.learning,
-          content: Text('History cleared'),
+          backgroundColor:
+              Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                  Theme.of(context).colorScheme.primary,
+          content: Text('History cleared',
+              style: TextStyle(
+                  color: Theme.of(context)
+                          .floatingActionButtonTheme
+                          .foregroundColor ??
+                      Theme.of(context).colorScheme.onPrimary)),
         ),
       );
     }
@@ -158,12 +167,15 @@ class _HistoryPageState extends State<HistoryPage> {
     if (user == null) {
       return Center(
         child: Text('Please log in to see history.',
-            style: TextStyle(color: AppColors.learning)),
+            style: TextStyle(
+                color: Theme.of(context)
+                    .extension<AppSemanticColors>()
+                    ?.learning)),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: _hiveReady
           ? ValueListenableBuilder(
               valueListenable: _box.listenable(),
@@ -187,8 +199,7 @@ class _HistoryPageState extends State<HistoryPage> {
                       'No history yet.',
                       style: TextStyle(
                         fontSize: 16,
-                        color:
-                            AppColors.textForBackground(AppColors.background),
+                        color: Theme.of(context).colorScheme.onBackground,
                       ),
                     ),
                   );
@@ -213,7 +224,11 @@ class _HistoryPageState extends State<HistoryPage> {
                             vertical: 12, horizontal: 16),
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: AppColors.known.withOpacity(0.85),
+                          color: Theme.of(context)
+                                  .extension<AppSemanticColors>()
+                                  ?.known
+                                  .withOpacity(0.85) ??
+                              Colors.green.withOpacity(0.85),
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: const [
                             BoxShadow(
@@ -239,13 +254,21 @@ class _HistoryPageState extends State<HistoryPage> {
             )
           : Center(
               child: CircularProgressIndicator(
-                color: AppColors.learning,
+                color: Theme.of(context)
+                        .floatingActionButtonTheme
+                        .backgroundColor ??
+                    Theme.of(context).colorScheme.primary,
               ),
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _clearHistory,
-        backgroundColor: AppColors.heatMidLow,
-        child: const Icon(Icons.delete, color: Colors.white),
+        backgroundColor:
+            Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                Theme.of(context).colorScheme.primary,
+        child: Icon(Icons.delete,
+            color:
+                Theme.of(context).floatingActionButtonTheme.foregroundColor ??
+                    Theme.of(context).colorScheme.onPrimary),
       ),
     );
   }

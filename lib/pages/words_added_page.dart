@@ -94,10 +94,13 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: AppColors.navBar,
+        backgroundColor:
+            Theme.of(context).extension<AppSemanticColors>()?.navBar,
         title: Text(
           'Words on ${widget.selectedDate.day} ${months[widget.selectedDate.month - 1]} ${widget.selectedDate.year}',
-          style: TextStyle(color: AppColors.navBarText),
+          style: TextStyle(
+              color:
+                  Theme.of(context).extension<AppSemanticColors>()?.appBarText),
         ),
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
@@ -126,10 +129,15 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
               itemBuilder: (context, index) {
                 final item = words[index];
 
-                final bgColor =
-                    AppColors.fromStatus(item['status'] ?? 'learning');
+                final bgColor = Theme.of(context)
+                        .extension<AppSemanticColors>()
+                        ?.fromStatus(item['status'] ?? 'learning') ??
+                    Colors.grey;
 
-                final textColor = AppColors.textForBackground(bgColor);
+                final textColor = Theme.of(context)
+                        .extension<AppSemanticColors>()
+                        ?.textForBackground(bgColor) ??
+                    Colors.white;
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),

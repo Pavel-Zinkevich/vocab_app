@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-Color getColor(int count, int maxCount) {
-  return AppColors.heatFromCount(count, maxCount);
+Color getColor(BuildContext context, int count, int maxCount) {
+  final colors = Theme.of(context).extension<AppSemanticColors>()!;
+  return colors.heatFromCount(count, maxCount);
 }
 
 Widget buildLegend(int maxCount, BuildContext context) {
@@ -14,17 +15,26 @@ Widget buildLegend(int maxCount, BuildContext context) {
           showDialog(
             context: context,
             builder: (_) => AlertDialog(
-              backgroundColor: AppColors.background,
+              backgroundColor:
+                  Theme.of(context).extension<AppSemanticColors>()?.background,
               title: Text(
                 "How we count words",
                 style: TextStyle(
-                  color: AppColors.textForBackground(AppColors.background),
+                  color: Theme.of(context)
+                      .extension<AppSemanticColors>()
+                      ?.textForBackground(Theme.of(context)
+                          .extension<AppSemanticColors>()!
+                          .background),
                 ),
               ),
               content: Text(
                 "Each square shows how many words you added that day.",
                 style: TextStyle(
-                  color: AppColors.textForBackground(AppColors.background),
+                  color: Theme.of(context)
+                      .extension<AppSemanticColors>()
+                      ?.textForBackground(Theme.of(context)
+                          .extension<AppSemanticColors>()!
+                          .background),
                 ),
               ),
             ),
@@ -33,7 +43,7 @@ Widget buildLegend(int maxCount, BuildContext context) {
         child: Text(
           "Learn how we count words",
           style: TextStyle(
-            color: AppColors.infoLink,
+            color: Theme.of(context).extension<AppSemanticColors>()?.infoLink,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -43,7 +53,11 @@ Widget buildLegend(int maxCount, BuildContext context) {
           Text(
             "Less",
             style: TextStyle(
-              color: AppColors.textForBackground(AppColors.background),
+              color: Theme.of(context)
+                  .extension<AppSemanticColors>()
+                  ?.textForBackground(Theme.of(context)
+                      .extension<AppSemanticColors>()!
+                      .background),
             ),
           ),
           const SizedBox(width: 8),
@@ -56,7 +70,7 @@ Widget buildLegend(int maxCount, BuildContext context) {
                 height: 14,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
-                  color: getColor(value.toInt(), maxCount),
+                  color: getColor(context, value.toInt(), maxCount),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: Colors.black12),
                   boxShadow: value > 0
@@ -76,7 +90,11 @@ Widget buildLegend(int maxCount, BuildContext context) {
           Text(
             "More",
             style: TextStyle(
-              color: AppColors.textForBackground(AppColors.background),
+              color: Theme.of(context)
+                  .extension<AppSemanticColors>()
+                  ?.textForBackground(Theme.of(context)
+                      .extension<AppSemanticColors>()!
+                      .background),
             ),
           ),
         ],
@@ -114,7 +132,7 @@ Widget buildMonthGrid(
           day,
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: AppColors.learning,
+            color: Theme.of(context).extension<AppSemanticColors>()?.learning,
           ),
         ),
       ),
@@ -142,7 +160,7 @@ Widget buildMonthGrid(
         child: Container(
           margin: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: getColor(count, maxCount),
+            color: getColor(context, count, maxCount),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Center(
@@ -153,7 +171,11 @@ Widget buildMonthGrid(
                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                 color: isToday && count > 0
                     ? Colors.white
-                    : AppColors.textForBackground(AppColors.background),
+                    : Theme.of(context)
+                        .extension<AppSemanticColors>()
+                        ?.textForBackground(Theme.of(context)
+                            .extension<AppSemanticColors>()!
+                            .background),
               ),
             ),
           ),

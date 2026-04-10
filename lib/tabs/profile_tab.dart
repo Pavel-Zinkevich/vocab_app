@@ -7,7 +7,8 @@ import '../utils/calendar_utils.dart';
 import '../pages/history_page.dart';
 import '../utils/diagram.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_controller.dart' as tc;
+// using Theme.of(context) for colors instead of AppColors to support dynamic themes
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -27,7 +28,6 @@ class _ProfileTabState extends State<ProfileTab>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() => setState(() {}));
   }
 
   @override
@@ -36,13 +36,10 @@ class _ProfileTabState extends State<ProfileTab>
     super.dispose();
   }
 
-  /// ✅ REAL-TIME STREAM (FIX)
   Stream<List<Map<String, dynamic>>> _vocabularyStream() {
     final user = _auth.currentUser;
 
-    if (user == null) {
-      return const Stream.empty();
-    }
+    if (user == null) return const Stream.empty();
 
     return _firestore
         .collection('users')
@@ -77,27 +74,22 @@ class _ProfileTabState extends State<ProfileTab>
 
   @override
   Widget build(BuildContext context) {
-    final bg = AppColors.background;
-    final tabBg = AppColors.navBar;
-    final textColor = AppColors.textForBackground(tabBg);
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+    final tabBg = Theme.of(context).appBarTheme.backgroundColor ??
+        Theme.of(context).colorScheme.surface;
+    final textColor = Theme.of(context).appBarTheme.titleTextStyle?.color ??
+        Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
         backgroundColor: tabBg,
-        elevation: 0,
-        title: Text(
-          'Profile',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        title: Text('Profile', style: TextStyle(color: textColor)),
         iconTheme: IconThemeData(color: textColor),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: AppColors.learning,
-          labelColor: AppColors.learning,
+          indicatorColor: Theme.of(context).colorScheme.primary,
+          labelColor: Theme.of(context).colorScheme.primary,
           unselectedLabelColor: textColor.withOpacity(0.6),
           tabs: const [
             Tab(icon: Icon(Icons.info), text: 'Info'),
@@ -114,16 +106,12 @@ class _ProfileTabState extends State<ProfileTab>
       body: TabBarView(
         controller: _tabController,
         children: [
-          /// ================= INFO TAB (FIXED REAL-TIME) =================
+          /// ================= INFO TAB =================
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: _vocabularyStream(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.learning,
-                  ),
-                );
+                return const Center(child: CircularProgressIndicator());
               }
 
               final words = snapshot.data!;
@@ -133,8 +121,7 @@ class _ProfileTabState extends State<ProfileTab>
                   ? 1
                   : calendarData.values.reduce((a, b) => a > b ? a : b);
 
-              final pageTextColor =
-                  AppColors.textForBackground(AppColors.background);
+              final pageTextColor = Theme.of(context).colorScheme.onBackground;
 
               return SingleChildScrollView(
                 child: Padding(
@@ -150,7 +137,9 @@ class _ProfileTabState extends State<ProfileTab>
                           color: pageTextColor,
                         ),
                       ),
+
                       const SizedBox(height: 16),
+
                       GestureDetector(
                         onTap: () => Navigator.push(
                           context,
@@ -165,9 +154,12 @@ class _ProfileTabState extends State<ProfileTab>
                           context,
                         ),
                       ),
+
                       const SizedBox(height: 12),
                       buildLegend(maxCount, context),
+
                       const SizedBox(height: 24),
+
                       Text(
                         "Vocabulary Progress",
                         style: TextStyle(
@@ -176,8 +168,56 @@ class _ProfileTabState extends State<ProfileTab>
                           color: pageTextColor,
                         ),
                       ),
+
                       const SizedBox(height: 12),
                       ProgressPage(words: words),
+
+                      const SizedBox(height: 30),
+
+                      // ================= DARK MODE TOGGLE =================
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Icons.dark_mode
+                                      : Icons.light_mode,
+                                ),
+                                const SizedBox(width: 10),
+                                const Text("Dark Mode"),
+                              ],
+                            ),
+                            ValueListenableBuilder<ThemeMode>(
+                              valueListenable: tc.ThemeController.themeMode,
+                              builder: (context, mode, _) {
+                                return Switch(
+                                  value: mode == ThemeMode.dark,
+                                  onChanged: (value) {
+                                    // Update the global theme mode (rebuilds MaterialApp)
+                                    tc.ThemeController.toggle(value);
+                                    // Rebuild this page so AppColors/AppTheme changes apply
+                                    setState(() {});
+                                  },
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),

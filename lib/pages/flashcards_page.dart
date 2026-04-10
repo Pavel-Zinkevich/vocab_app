@@ -160,21 +160,24 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     return value.toString();
   }
 
-  Color _cardColor() {
+  Color _cardColor(BuildContext context) {
     final status = _currentWord?['status'] ?? 'learning';
 
     switch (status) {
       case 'known':
-        return AppColors.known;
+        return Theme.of(context).extension<AppSemanticColors>()?.known ??
+            AppSemanticColors.light().known;
       case 'learned':
-        return AppColors.learned;
+        return Theme.of(context).extension<AppSemanticColors>()?.learned ??
+            AppSemanticColors.light().learned;
       default:
-        return AppColors.learning;
+        return Theme.of(context).extension<AppSemanticColors>()?.learning ??
+            AppSemanticColors.light().learning;
     }
   }
 
-  Widget _buildCard(String text) {
-    final bg = _cardColor();
+  Widget _buildCard(BuildContext context, String text) {
+    final bg = _cardColor(context);
 
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 24),
@@ -195,7 +198,10 @@ class _FlashcardsPageState extends State<FlashcardsPage>
           text,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: AppColors.textForBackground(bg),
+            color: Theme.of(context)
+                    .extension<AppSemanticColors>()
+                    ?.textForBackground(bg) ??
+                Colors.white,
             fontSize: 28,
             fontWeight: FontWeight.bold,
           ),
@@ -212,7 +218,7 @@ class _FlashcardsPageState extends State<FlashcardsPage>
 
   @override
   Widget build(BuildContext context) {
-    final bg = AppColors.background;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
 
     if (_isLoading) {
       return Scaffold(
@@ -220,11 +226,16 @@ class _FlashcardsPageState extends State<FlashcardsPage>
         appBar: AppBar(
           backgroundColor: bg,
           elevation: 0,
-          title: Text("Flashcards",
-              style: TextStyle(color: AppColors.textForBackground(bg))),
+          title: Text(
+            "Flashcards",
+            style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
+          ),
         ),
         body: Center(
-          child: CircularProgressIndicator(color: AppColors.learning),
+          child: CircularProgressIndicator(
+              color:
+                  Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                      Theme.of(context).colorScheme.primary),
         ),
       );
     }
@@ -235,12 +246,18 @@ class _FlashcardsPageState extends State<FlashcardsPage>
         appBar: AppBar(
           backgroundColor: bg,
           elevation: 0,
-          title: Text("Flashcards",
-              style: TextStyle(color: AppColors.textForBackground(bg))),
+          title: Text(
+            "Flashcards",
+            style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
+          ),
         ),
         body: Center(
           child: Text("No words yet",
-              style: TextStyle(color: AppColors.textForBackground(bg))),
+              style: TextStyle(
+                  color: Theme.of(context)
+                          .floatingActionButtonTheme
+                          .backgroundColor ??
+                      Theme.of(context).colorScheme.primary)),
         ),
       );
     }
@@ -251,14 +268,18 @@ class _FlashcardsPageState extends State<FlashcardsPage>
         appBar: AppBar(
           backgroundColor: bg,
           elevation: 0,
-          title: Text("Flashcards",
-              style: TextStyle(color: AppColors.textForBackground(bg))),
+          title: Text(
+            "Flashcards",
+            style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
+          ),
         ),
         body: Center(
           child: Text(
             "No words to review right now 🎉",
             style: TextStyle(
-              color: AppColors.textForBackground(bg),
+              color:
+                  Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                      Theme.of(context).colorScheme.primary,
             ),
           ),
         ),
@@ -273,7 +294,7 @@ class _FlashcardsPageState extends State<FlashcardsPage>
         title: Text(
           "Flashcards",
           style: TextStyle(
-            color: AppColors.textForBackground(bg),
+            color: Theme.of(context).colorScheme.onBackground,
           ),
         ),
       ),
@@ -316,11 +337,12 @@ class _FlashcardsPageState extends State<FlashcardsPage>
                             ? Transform(
                                 alignment: Alignment.center,
                                 transform: Matrix4.rotationY(pi),
-                                child: _buildCard(_safeText(
-                                    _currentWord?['translation'],
-                                    "No translation")),
+                                child: _buildCard(
+                                    context,
+                                    _safeText(_currentWord?['translation'],
+                                        "No translation")),
                               )
-                            : _buildCard(
+                            : _buildCard(context,
                                 _safeText(_currentWord?['word'], "No word")),
                       );
                     },
@@ -337,13 +359,17 @@ class _FlashcardsPageState extends State<FlashcardsPage>
               children: [
                 Text(
                   "Tap to flip",
-                  style: TextStyle(color: AppColors.learning),
+                  style: TextStyle(
+                      color: Theme.of(context)
+                              .floatingActionButtonTheme
+                              .backgroundColor ??
+                          Theme.of(context).colorScheme.primary),
                 ),
                 SizedBox(height: 10),
                 Text(
                   "Swipe left = knew it | right = didn’t",
                   style: TextStyle(
-                    color: AppColors.textForBackground(bg),
+                    color: Theme.of(context).colorScheme.onBackground,
                   ),
                 ),
               ],

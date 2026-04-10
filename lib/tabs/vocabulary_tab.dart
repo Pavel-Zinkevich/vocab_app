@@ -487,14 +487,17 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
   @override
   Widget build(BuildContext context) {
-    final Color appBarColor = AppColors.navBar;
-    final Color textColor = AppColors.textForBackground(appBarColor);
+    final Color appBarColor = Theme.of(context).appBarTheme.backgroundColor ??
+        Theme.of(context).colorScheme.surface;
+    final Color textColor =
+        Theme.of(context).appBarTheme.titleTextStyle?.color ??
+            Theme.of(context).colorScheme.onSurface;
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        backgroundColor: AppColors.navBar,
+        backgroundColor: appBarColor,
         iconTheme: IconThemeData(
-          color: AppColors.textForBackground(AppColors.navBar),
+          color: textColor,
         ),
         title: TextField(
           controller: _searchController,
@@ -502,16 +505,15 @@ class _VocabularyTabState extends State<VocabularyTab> {
             hintText: 'Search your words...',
             border: InputBorder.none,
             hintStyle: TextStyle(
-              color: AppColors.textForBackground(AppColors.navBar)
-                  .withOpacity(0.6),
+              color: textColor.withOpacity(0.6),
             ),
             prefixIcon: Icon(
               Icons.search,
-              color: AppColors.textForBackground(AppColors.navBar),
+              color: textColor,
             ),
           ),
           style: TextStyle(
-            color: AppColors.textForBackground(AppColors.navBar),
+            color: textColor,
           ),
           onChanged: (value) {
             setState(() {
@@ -523,7 +525,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
       body: Stack(
         children: [
           if (!_hiveReady)
-            Center(child: CircularProgressIndicator(color: AppColors.loader))
+            Center(
+                child: CircularProgressIndicator(
+                    color: Theme.of(context).colorScheme.primary))
           else
             ValueListenableBuilder(
               valueListenable: _box.listenable(),
@@ -564,7 +568,10 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   return Center(
                       child: Text('No words yet. Tap + to add one.',
                           style: TextStyle(
-                              fontSize: 16, color: AppColors.textSecondary)));
+                              fontSize: 16,
+                              color: Theme.of(context)
+                                  .extension<AppSemanticColors>()
+                                  ?.textSecondary)));
                 }
 
                 return ListView.builder(
@@ -573,10 +580,15 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   itemBuilder: (context, index) {
                     final item = filtered[index];
 
-                    final bgColor =
-                        AppColors.fromStatus(item['status'] ?? 'learning');
+                    final bgColor = Theme.of(context)
+                            .extension<AppSemanticColors>()
+                            ?.fromStatus(item['status'] ?? 'learning') ??
+                        Colors.grey;
 
-                    final textColor = AppColors.textForBackground(bgColor);
+                    final textColor = Theme.of(context)
+                            .extension<AppSemanticColors>()
+                            ?.textForBackground(bgColor) ??
+                        Colors.white;
                     final subTextColor = textColor.withOpacity(0.7);
 
                     final displayWord = item['word'] ?? '';
@@ -596,7 +608,10 @@ class _VocabularyTabState extends State<VocabularyTab> {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.shadow,
+                                color: Theme.of(context)
+                                        .extension<AppSemanticColors>()
+                                        ?.shadow ??
+                                    Colors.black26,
                                 blurRadius: 6,
                                 offset: Offset(0, 4),
                               )
@@ -623,7 +638,10 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                     height: 40,
                                     decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: AppColors.iconBg),
+                                        color: Theme.of(context)
+                                                .extension<AppSemanticColors>()
+                                                ?.iconBg ??
+                                            Colors.grey),
                                     child: IconButton(
                                       icon: Icon(
                                         Icons.edit,
@@ -643,10 +661,17 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                     height: 40,
                                     decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: AppColors.dangerBg),
+                                        color: Theme.of(context)
+                                                .extension<AppSemanticColors>()
+                                                ?.dangerBg ??
+                                            Colors.red.withOpacity(0.2)),
                                     child: IconButton(
                                       icon: Icon(Icons.close,
-                                          color: AppColors.danger),
+                                          color: Theme.of(context)
+                                                  .extension<
+                                                      AppSemanticColors>()
+                                                  ?.danger ??
+                                              Colors.redAccent),
                                       onPressed: () => _deleteWord(
                                           item['__localKey'] ??
                                               item['remoteId'] ??
@@ -676,9 +701,17 @@ class _VocabularyTabState extends State<VocabularyTab> {
             right: 16,
             child: FloatingActionButton(
               heroTag: 'lookupWord',
-              backgroundColor: AppColors.heatMidLow,
+              backgroundColor:
+                  Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                      Theme.of(context).colorScheme.primary,
               onPressed: _showLookupDialog,
-              child: Icon(Icons.search, color: AppColors.white),
+              child: Icon(
+                Icons.search,
+                color: Theme.of(context)
+                        .floatingActionButtonTheme
+                        .foregroundColor ??
+                    Theme.of(context).colorScheme.onPrimary,
+              ),
             ),
           ),
         ],
@@ -689,13 +722,21 @@ class _VocabularyTabState extends State<VocabularyTab> {
         label: Text(
           "Add a New Word",
           style: TextStyle(
-            color: AppColors.white,
+            color:
+                Theme.of(context).floatingActionButtonTheme.foregroundColor ??
+                    Theme.of(context).colorScheme.onPrimary,
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
         ),
-        icon: Icon(Icons.add, color: AppColors.white),
-        backgroundColor: AppColors.heatMidLow,
+        icon: Icon(
+          Icons.add,
+          color: Theme.of(context).floatingActionButtonTheme.foregroundColor ??
+              Theme.of(context).colorScheme.onPrimary,
+        ),
+        backgroundColor:
+            Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                Theme.of(context).colorScheme.primary,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),

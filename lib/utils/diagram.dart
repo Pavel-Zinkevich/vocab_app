@@ -7,12 +7,18 @@ class ProgressPainter extends CustomPainter {
   final int known;
   final int learned;
   final int total;
+  final Color learningColor;
+  final Color knownColor;
+  final Color learnedColor;
 
   ProgressPainter({
     required this.learning,
     required this.known,
     required this.learned,
     required this.total,
+    required this.learningColor,
+    required this.knownColor,
+    required this.learnedColor,
   });
 
   @override
@@ -52,9 +58,9 @@ class ProgressPainter extends CustomPainter {
       startAngle += sweep;
     }
 
-    drawSegment(learning, AppColors.learning);
-    drawSegment(known, AppColors.known);
-    drawSegment(learned, AppColors.learned); // green
+    drawSegment(learning, learningColor);
+    drawSegment(known, knownColor);
+    drawSegment(learned, learnedColor); // green
   }
 
   @override
@@ -94,6 +100,10 @@ class ProgressPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final stats = _calculateStats();
     final total = words.isEmpty ? 1 : words.length;
+    final colors = Theme.of(context).extension<AppSemanticColors>()!;
+    final learningColor = colors.learning;
+    final knownColor = colors.known;
+    final learnedColor = colors.learned;
 
     return Center(
       child: Column(
@@ -109,6 +119,9 @@ class ProgressPage extends StatelessWidget {
                   known: stats['known']!,
                   learned: stats['learned']!,
                   total: total,
+                  learningColor: learningColor,
+                  knownColor: knownColor,
+                  learnedColor: learnedColor,
                 ),
               ),
               Column(
@@ -131,11 +144,11 @@ class ProgressPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-          _statRow("Learning", stats['learning']!, AppColors.learning),
+          _statRow("Learning", stats['learning']!, learningColor),
           const SizedBox(height: 8),
-          _statRow("Known", stats['known']!, AppColors.known),
+          _statRow("Known", stats['known']!, knownColor),
           const SizedBox(height: 8),
-          _statRow("Learned", stats['learned']!, AppColors.learned),
+          _statRow("Learned", stats['learned']!, learnedColor),
         ],
       ),
     );
@@ -146,9 +159,9 @@ class ProgressPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       margin: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         children: [

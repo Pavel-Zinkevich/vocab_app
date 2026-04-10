@@ -429,25 +429,34 @@ class _DefinitionPageState extends State<DefinitionPage> {
   Widget build(BuildContext context) {
     final surface = Theme.of(context).colorScheme.surface;
     return Scaffold(
-      backgroundColor: AppColors.pageBackground,
+      backgroundColor:
+          Theme.of(context).extension<AppSemanticColors>()?.pageBackground,
       appBar: AppBar(
         // automaticallyImplyLeading: false, arrow
         elevation: 0,
-        backgroundColor: AppColors.appBarTransparent,
-        foregroundColor: AppColors.appBarText,
+        backgroundColor: Colors.transparent,
+        foregroundColor:
+            Theme.of(context).extension<AppSemanticColors>()?.appBarText,
         title: const Text('', style: TextStyle(color: Colors.black)),
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.loader))
+          ? Center(
+              child: CircularProgressIndicator(
+                  color:
+                      Theme.of(context).extension<AppSemanticColors>()?.loader))
           : _error != null
               ? _buildError()
               : _buildContent(surface),
       floatingActionButton: FloatingActionButton(
         heroTag: 'lookupWord',
-        backgroundColor: AppColors.heatMidLow,
+        backgroundColor:
+            Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+                Theme.of(context).colorScheme.primary,
         onPressed: _showLookupDialog,
-        child: const Icon(Icons.search, color: AppColors.white),
+        child: Icon(Icons.search,
+            color:
+                Theme.of(context).floatingActionButtonTheme.foregroundColor ??
+                    Theme.of(context).colorScheme.onPrimary),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
@@ -463,7 +472,18 @@ class _DefinitionPageState extends State<DefinitionPage> {
             Text(_error ?? 'Unknown error', textAlign: TextAlign.center),
             const SizedBox(height: 12),
             ElevatedButton(
-                onPressed: _fetchDefinition, child: const Text('Retry')),
+                onPressed: _fetchDefinition,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context)
+                          .floatingActionButtonTheme
+                          .backgroundColor ??
+                      Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context)
+                          .floatingActionButtonTheme
+                          .foregroundColor ??
+                      Theme.of(context).colorScheme.onPrimary,
+                ),
+                child: const Text('Retry')),
           ],
         ),
       ),
@@ -479,9 +499,12 @@ class _DefinitionPageState extends State<DefinitionPage> {
           decoration: BoxDecoration(
             color: surface,
             borderRadius: BorderRadius.circular(18),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                  color: AppColors.cardShadow,
+                  color: Theme.of(context)
+                          .extension<AppSemanticColors>()
+                          ?.cardShadow ??
+                      Colors.black12,
                   blurRadius: 12,
                   offset: Offset(0, 6))
             ],
@@ -537,7 +560,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
   Widget _buildAudioBar() {
     final border = OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.controlBorder));
+        borderSide: BorderSide(
+            color: Theme.of(context)
+                    .extension<AppSemanticColors>()
+                    ?.controlBorder ??
+                Colors.black12));
 
     return Wrap(
       spacing: 8,
@@ -628,7 +655,8 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const color = AppColors.badge;
+    final color = Theme.of(context).extension<AppSemanticColors>()?.badge ??
+        AppSemanticColors.light().badge;
 
     return GestureDetector(
       onTap: url != null
@@ -641,7 +669,7 @@ class _Badge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.badgeBg,
+          color: Theme.of(context).extension<AppSemanticColors>()?.badgeBg,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(color: color.withOpacity(0.6)),
         ),
@@ -666,11 +694,7 @@ class _SenseTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context).textTheme.bodyLarge;
-    final posStyle = base?.copyWith(
-        fontSize: (base?.fontSize ?? 16) - 2,
-        color: AppColors.textMuted,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.2);
+    // posStyle removed - unused
 
     final state = context.findAncestorStateOfType<_DefinitionPageState>();
 
@@ -681,7 +705,10 @@ class _SenseTile extends StatelessWidget {
         children: [
           RichText(
             text: TextSpan(
-              style: base?.copyWith(color: AppColors.textPrimaryStrong),
+              style: base?.copyWith(
+                  color: Theme.of(context)
+                      .extension<AppSemanticColors>()
+                      ?.textPrimaryStrong),
               children: [
                 TextSpan(
                     text: '${index + 1}. ',
@@ -720,7 +747,10 @@ class _SenseTile extends StatelessWidget {
           style: italic
               ? Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontStyle: FontStyle.italic,
-                  color: AppColors.textPrimaryStrong.withOpacity(0.7))
+                  color: Theme.of(context)
+                      .extension<AppSemanticColors>()
+                      ?.textPrimaryStrong
+                      .withOpacity(0.7))
               : Theme.of(context).textTheme.bodyMedium,
         ),
       ),

@@ -7,11 +7,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/email_verification_page.dart';
 
-import 'theme/app_colors.dart';
+import 'theme/theme_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,43 +30,18 @@ Future<void> main() async {
 class VocabApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Vocab App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.learning,
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: AppColors.background,
-        appBarTheme: AppBarTheme(
-          backgroundColor: AppColors.navBar,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-          iconTheme: IconThemeData(color: AppColors.navBarIcon),
-          titleTextStyle: TextStyle(
-            color: AppColors.navBarText,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          backgroundColor: AppColors.navBar,
-          selectedItemColor: AppColors.learning,
-          unselectedItemColor: AppColors.navBarIcon.withOpacity(0.5),
-          showUnselectedLabels: true,
-          elevation: 8,
-          type: BottomNavigationBarType.fixed,
-        ),
-        floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: AppColors.learning,
-          foregroundColor: Colors.white,
-          elevation: 6,
-        ),
-      ),
-      home: AuthGate(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.themeMode,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'Vocab App',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeController.lightTheme,
+          darkTheme: ThemeController.darkTheme,
+          themeMode: mode,
+          home: AuthGate(),
+        );
+      },
     );
   }
 }
@@ -78,10 +54,12 @@ class AuthGate extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
-            backgroundColor: AppColors.background,
+            // Use theme scaffold background so waiting screen follows the
+            // selected theme mode.
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: Center(
               child: CircularProgressIndicator(
-                color: AppColors.learning,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           );
@@ -136,9 +114,15 @@ class _HomePageState extends State<HomePage> {
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
-          backgroundColor: AppColors.navBar,
-          selectedItemColor: AppColors.learning,
-          unselectedItemColor: AppColors.navBarIcon.withOpacity(0.6),
+          backgroundColor:
+              Theme.of(context).bottomNavigationBarTheme.backgroundColor ??
+                  Theme.of(context).colorScheme.surface,
+          selectedItemColor:
+              Theme.of(context).bottomNavigationBarTheme.selectedItemColor ??
+                  Theme.of(context).colorScheme.primary,
+          unselectedItemColor:
+              Theme.of(context).bottomNavigationBarTheme.unselectedItemColor ??
+                  Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.book),
