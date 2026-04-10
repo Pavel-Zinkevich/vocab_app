@@ -89,7 +89,7 @@ String _cleanTranslation(String raw) {
 
   // Remove grammar tags
   final grammarPattern = RegExp(
-    r'\b(vtr|vi|adj|adv|expr|loc|impers|prep| pron| v|insep|phrasal|v pron|interj| n |nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
+    r'\b(vtr|vi|adj|adv|prép|expr|ind|loc|impers|prep| pron| v|insep|phrasal|v pron|interj| n |nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
     caseSensitive: false,
   );
   cleaned = cleaned.replaceAll(grammarPattern, '');
@@ -572,8 +572,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<_AudioDropdownValue>(
+                isExpanded: true,
                 hint: Text(
-                    '${_audio[_accentIndex].label.toUpperCase()} • ${(_speed * 100).toInt()}%'),
+                  '${_audio[_accentIndex].label.toUpperCase()} • ${(_speed * 100).toInt()}%',
+                  overflow: TextOverflow.ellipsis,
+                ),
                 value: null,
                 items: [
                   ...List.generate(_audio.length, (i) {

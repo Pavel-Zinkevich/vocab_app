@@ -94,10 +94,11 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: AppColors.navBar,
         title: Text(
           'Words on ${widget.selectedDate.day} ${months[widget.selectedDate.month - 1]} ${widget.selectedDate.year}',
+          style: TextStyle(color: AppColors.navBarText),
         ),
-        backgroundColor: Colors.deepPurple,
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _wordsFuture,
