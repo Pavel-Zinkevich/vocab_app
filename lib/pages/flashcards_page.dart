@@ -272,62 +272,74 @@ class _FlashcardsPageState extends State<FlashcardsPage>
         ),
       ),
       body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          GestureDetector(
-            onTap: () {
-              if (_controller.isCompleted) {
-                _controller.reverse();
-              } else {
-                _controller.forward();
-              }
+          /// 👇 This takes all available space and centers the card
+          Expanded(
+            child: Center(
+              child: GestureDetector(
+                onTap: () {
+                  if (_controller.isCompleted) {
+                    _controller.reverse();
+                  } else {
+                    _controller.forward();
+                  }
 
-              Future.delayed(Duration(milliseconds: 200), () {
-                setState(() {
-                  _showTranslation = !_showTranslation;
-                });
-              });
-            },
-            child: Dismissible(
-              key: ValueKey(_currentWord!['id']),
-              direction: DismissDirection.horizontal,
-              onDismissed: (direction) {
-                _handleSwipe(direction == DismissDirection.endToStart);
-              },
-              child: AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  final isUnder = (_animation.value > pi / 2);
-
-                  return Transform(
-                    transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.001)
-                      ..rotateY(_animation.value),
-                    alignment: Alignment.center,
-                    child: isUnder
-                        ? Transform(
-                            alignment: Alignment.center,
-                            transform: Matrix4.rotationY(pi),
-                            child: _buildCard(
-                              _currentWord!['translation'] ?? '',
-                            ),
-                          )
-                        : _buildCard(_currentWord!['word'] ?? ''),
-                  );
+                  Future.delayed(Duration(milliseconds: 200), () {
+                    setState(() {
+                      _showTranslation = !_showTranslation;
+                    });
+                  });
                 },
+                child: Dismissible(
+                  key: ValueKey(_currentWord!['id']),
+                  direction: DismissDirection.horizontal,
+                  onDismissed: (direction) {
+                    _handleSwipe(direction == DismissDirection.endToStart);
+                  },
+                  child: AnimatedBuilder(
+                    animation: _animation,
+                    builder: (context, child) {
+                      final isUnder = (_animation.value > pi / 2);
+
+                      return Transform(
+                        transform: Matrix4.identity()
+                          ..setEntry(3, 2, 0.001)
+                          ..rotateY(_animation.value),
+                        alignment: Alignment.center,
+                        child: isUnder
+                            ? Transform(
+                                alignment: Alignment.center,
+                                transform: Matrix4.rotationY(pi),
+                                child: _buildCard(
+                                  _currentWord!['translation'] ?? '',
+                                ),
+                              )
+                            : _buildCard(_currentWord!['word'] ?? ''),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),
-          SizedBox(height: 20),
-          Text(
-            "Tap to flip",
-            style: TextStyle(color: AppColors.learning),
-          ),
-          SizedBox(height: 10),
-          Text(
-            "Swipe left = knew it | right = didn’t",
-            style: TextStyle(
-              color: AppColors.textForBackground(bg),
+
+          /// 👇 Fixed bottom section (won’t move anymore)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 30),
+            child: Column(
+              children: [
+                Text(
+                  "Tap to flip",
+                  style: TextStyle(color: AppColors.learning),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Swipe left = knew it | right = didn’t",
+                  style: TextStyle(
+                    color: AppColors.textForBackground(bg),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
