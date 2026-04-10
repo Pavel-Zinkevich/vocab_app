@@ -701,7 +701,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
           ),
         ),
         icon: Icon(Icons.add, color: Colors.white),
-        backgroundColor: AppColors.heatHigh,
+        backgroundColor: AppColors.heatMidLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),

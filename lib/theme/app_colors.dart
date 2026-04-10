@@ -2,36 +2,41 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   static Color textForBackground(Color bg) {
-    // Compute luminance (0 = dark, 1 = light)
     final double luminance = bg.computeLuminance();
-
-    // threshold (you can tweak 0.5 → 0.6 if you want earlier switch)
-    return luminance > 0.55
-        ? const Color.fromARGB(255, 75, 72, 72)
-        : Colors.white;
+    return luminance > 0.55 ? const Color(0xFF3A3A3A) : Colors.white;
   }
 
-  // learning → soft lavender
-  static const Color learning = Color(0xFFB57EDC);
+  // =========================
+  // Core status colors (refreshed palette)
+  // =========================
 
-  // known → sage green
-  static const Color known = Color(0xFFA8C3A0);
+  // learning → soft periwinkle (calmer than strong purple)
+  static const Color learning = Color(0xFF9B8CFF);
 
-  // learned → slightly deeper cream/purple-tinted neutral for contrast
-  static const Color learned = Color(0xFFEDE7F6);
+  // known → muted sage green (more natural, less saturated)
+  static const Color known = Color(0xFF9FC7A6);
+
+  // learned → soft lavender-gray (cleaner background feel)
+  static const Color learned = Color(0xFFE9E4F5);
 
   static const Color textOnStatus = Colors.white;
 
-  static const Color background = Color(0xFFF6F1EB); // cream background
+  // app background → warm off-white (less yellow, more modern)
+  static const Color background = Color(0xFFF7F7FB);
+
   // =========================
-  // Navbar / AppBar colors
+  // Navbar / AppBar
   // =========================
 
-  static const Color navBar = Color(0xFFEEE6FF); // soft lavender tint
+  static const Color navBar = Color(0xFFEDEAFF);
 
-  static Color navBarText = const Color(0xFF2E2A3A);
+  static const Color navBarText = Color(0xFF2B2B3A);
+  static const Color navBarIcon = Color(0xFF2B2B3A);
 
-  static Color navBarIcon = const Color(0xFF2E2A3A);
+  // =========================
+  // Status mapping
+  // =========================
+
   static Color fromStatus(String status) {
     switch (status) {
       case 'learned':
@@ -43,16 +48,21 @@ class AppColors {
         return learning;
     }
   }
+
+  static Color textFromStatus(String status) {
+    return textOnStatus;
+  }
+
   // =========================
-  // Heatmap / activity colors
+  // Heatmap (more modern teal → blue gradient)
   // =========================
 
-  static const Color heatEmpty = Color(0xFFE0E0E0);
+  static const Color heatEmpty = Color(0xFFE6E6EB);
 
-  static const Color heatLow = Color(0xFFB2DFDB);
-  static const Color heatMidLow = Color(0xFF80CBC4);
-  static const Color heatMid = Color(0xFF4DB6AC);
-  static const Color heatHigh = Color(0xFF26A69A);
+  static const Color heatLow = Color(0xFFBEE3DB);
+  static const Color heatMidLow = Color(0xFF86D1C1);
+  static const Color heatMid = Color(0xFF4FBFA8);
+  static const Color heatHigh = Color(0xFF2AAE91);
 
   static Color heatColor(double ratio) {
     if (ratio <= 0) return heatEmpty;
@@ -67,9 +77,9 @@ class AppColors {
     return heatColor(count / maxCount);
   }
 
-  // UI helper colors
-  static const Color infoLink = Color(0xFF4A90E2);
-  static Color textFromStatus(String status) {
-    return textOnStatus;
-  }
+  // =========================
+  // Links / accents
+  // =========================
+
+  static const Color infoLink = Color(0xFF4C7DFF);
 }
