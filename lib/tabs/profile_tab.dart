@@ -36,23 +36,28 @@ class _ProfileTabState extends State<ProfileTab>
     super.dispose();
   }
 
-  Future<List<Map<String, dynamic>>> _getVocabulary() async {
+  /// ✅ REAL-TIME STREAM (FIX)
+  Stream<List<Map<String, dynamic>>> _vocabularyStream() {
     final user = _auth.currentUser;
-    if (user == null) return [];
 
-    final snapshot = await _firestore
+    if (user == null) {
+      return const Stream.empty();
+    }
+
+    return _firestore
         .collection('users')
         .doc(user.uid)
         .collection('vocabulary')
-        .get();
-
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      return {
-        'step': data['step'] ?? 0,
-        'createdAt': data['createdAt'],
-      };
-    }).toList();
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'step': data['step'] ?? 0,
+          'createdAt': data['createdAt'],
+        };
+      }).toList();
+    });
   }
 
   Map<DateTime, int> _buildDailyStats(List<Map<String, dynamic>> words) {
@@ -73,7 +78,6 @@ class _ProfileTabState extends State<ProfileTab>
   @override
   Widget build(BuildContext context) {
     final bg = AppColors.background;
-
     final tabBg = AppColors.navBar;
     final textColor = AppColors.textForBackground(tabBg);
 
@@ -110,9 +114,9 @@ class _ProfileTabState extends State<ProfileTab>
       body: TabBarView(
         controller: _tabController,
         children: [
-          /// ================= INFO TAB =================
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: _getVocabulary(),
+          /// ================= INFO TAB (FIXED REAL-TIME) =================
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _vocabularyStream(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return Center(
@@ -129,7 +133,7 @@ class _ProfileTabState extends State<ProfileTab>
                   ? 1
                   : calendarData.values.reduce((a, b) => a > b ? a : b);
 
-              final textColor =
+              final pageTextColor =
                   AppColors.textForBackground(AppColors.background);
 
               return SingleChildScrollView(
@@ -143,7 +147,7 @@ class _ProfileTabState extends State<ProfileTab>
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: textColor,
+                          color: pageTextColor,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -169,7 +173,7 @@ class _ProfileTabState extends State<ProfileTab>
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: textColor,
+                          color: pageTextColor,
                         ),
                       ),
                       const SizedBox(height: 12),

@@ -46,10 +46,30 @@ class _AudioDropdownValue {
 class _Sense {
   final String french;
   final String translation;
-  final List<String> frExamples = [];
-  final List<String> enExamples = [];
+  final List<String> frExamples;
+  final List<String> enExamples;
 
-  _Sense({required this.french, required this.translation});
+  _Sense({
+    required this.french,
+    required this.translation,
+    List<String>? frExamples,
+    List<String>? enExamples,
+  })  : frExamples = frExamples ?? [],
+        enExamples = enExamples ?? [];
+
+  _Sense copyWith({
+    String? french,
+    String? translation,
+    List<String>? frExamples,
+    List<String>? enExamples,
+  }) {
+    return _Sense(
+      french: french ?? this.french,
+      translation: translation ?? this.translation,
+      frExamples: frExamples ?? List.from(this.frExamples),
+      enExamples: enExamples ?? List.from(this.enExamples),
+    );
+  }
 }
 
 /// --- Audio Option Model ---
@@ -69,7 +89,7 @@ String _cleanTranslation(String raw) {
 
   // Remove grammar tags
   final grammarPattern = RegExp(
-    r'\b(vtr|vi|adj|adv|expr|loc|prep| pron| v|insep|phrasal|v pron|interj| n |nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
+    r'\b(vtr|vi|adj|adv|expr|loc|impers|prep| pron| v|insep|phrasal|v pron|interj| n |nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
     caseSensitive: false,
   );
   cleaned = cleaned.replaceAll(grammarPattern, '');
@@ -349,9 +369,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
       final frExTd = tr.querySelector("td.FrEx");
       final toExTd = tr.querySelector("td.ToEx");
 
-      if (frTd != null || toTd != null) {
-        final french = frTd?.text.trim() ?? '';
-        final translation = toTd?.text.trim() ?? '';
+      if (frTd != null && toTd != null) {
+        // --- NORMAL CASE (new sense) ---
+        final french = frTd.text.trim();
+        final translation = toTd.text.trim();
+
         if (french.isEmpty || translation.isEmpty) continue;
 
         final sense = _Sense(
@@ -361,6 +383,21 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
         _attachExamples(sense, frExTd, toExTd, unescape);
         _senses.add(sense);
+      } else if (frTd == null && toTd != null && _senses.isNotEmpty) {
+        // --- additional translation for previous sense ---
+        final extraTranslation =
+            _cleanTranslation(unescape.convert(toTd.text.trim()));
+
+        if (extraTranslation.isNotEmpty) {
+          final lastIndex = _senses.length - 1;
+          final last = _senses.last;
+
+          _senses[lastIndex] = last.copyWith(
+            translation: "${last.translation} / $extraTranslation",
+          );
+        }
+
+        _attachExamples(_senses.last, frExTd, toExTd, unescape);
       } else if ((frExTd != null || toExTd != null) && _senses.isNotEmpty) {
         _attachExamples(_senses.last, frExTd, toExTd, unescape);
       }
