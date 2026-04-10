@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_colors.dart';
 
 class WordsAddedPage extends StatefulWidget {
   final DateTime selectedDate;
@@ -119,70 +120,57 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
           //print("Displaying ${words.length} words");
 
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: words.length,
-            itemBuilder: (context, index) {
-              final item = words[index];
+              padding: const EdgeInsets.all(16),
+              itemCount: words.length,
+              itemBuilder: (context, index) {
+                final item = words[index];
 
-              // Set card color based on status
-              Color bgColor;
-              switch (item['status']) {
-                case 'known':
-                  bgColor = Colors.green;
-                  break;
-                case 'unknown':
-                  bgColor = const Color.fromARGB(255, 194, 94, 87);
-                  break;
-                default:
-                  bgColor = Colors.white;
-              }
+                final bgColor =
+                    AppColors.fromStatus(item['status'] ?? 'learning');
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 6,
-                        offset: const Offset(0, 4),
-                      )
-                    ],
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${item['word']} - ${item['translation']}',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: bgColor == Colors.white
-                              ? Colors.black
-                              : Colors.white,
-                        ),
-                      ),
-                      if ((item['context'] ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 6),
+                final textColor = AppColors.textForBackground(bgColor);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 6,
+                          offset: Offset(0, 4),
+                        )
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          item['context']!,
+                          '${item['word']} - ${item['translation']}',
                           style: TextStyle(
-                            color: bgColor == Colors.white
-                                ? Colors.black54
-                                : Colors.white70,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
                           ),
                         ),
+                        if ((item['context'] ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            item['context'],
+                            style: TextStyle(
+                              color: textColor.withOpacity(0.8),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
-          );
+                );
+              });
         },
       ),
     );
