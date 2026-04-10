@@ -213,7 +213,7 @@ class _HistoryPageState extends State<HistoryPage> {
                             vertical: 12, horizontal: 16),
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: AppColors.heatMidLow.withOpacity(0.85),
+                          color: AppColors.known.withOpacity(0.85),
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: const [
                             BoxShadow(
@@ -244,7 +244,7 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _clearHistory,
-        backgroundColor: AppColors.known,
+        backgroundColor: AppColors.heatMidLow,
         child: const Icon(Icons.delete, color: Colors.white),
       ),
     );

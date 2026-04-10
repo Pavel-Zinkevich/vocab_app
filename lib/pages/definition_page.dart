@@ -445,7 +445,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
               : _buildContent(surface),
       floatingActionButton: FloatingActionButton(
         heroTag: 'lookupWord',
-        backgroundColor: AppColors.fab,
+        backgroundColor: AppColors.heatMidLow,
         onPressed: _showLookupDialog,
         child: const Icon(Icons.search, color: AppColors.white),
       ),
