@@ -47,6 +47,25 @@ class _VocabularyTabState extends State<VocabularyTab> {
     return DateTime.utc(2000);
   }
 
+  // Safely convert Hive-stored maps which may be Map<dynamic,dynamic>
+  // into Map<String,dynamic> to avoid runtime type cast errors.
+  Map<String, dynamic> _toStringKeyedMap(dynamic raw) {
+    if (raw == null) return <String, dynamic>{};
+    if (raw is Map<String, dynamic>) return Map<String, dynamic>.from(raw);
+    if (raw is Map) {
+      final out = <String, dynamic>{};
+      raw.forEach((k, v) {
+        try {
+          out[k?.toString() ?? ''] = v;
+        } catch (_) {
+          // ignore malformed keys
+        }
+      });
+      return out;
+    }
+    return <String, dynamic>{};
+  }
+
   // Firebase and Hive instances
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
@@ -68,18 +87,25 @@ class _VocabularyTabState extends State<VocabularyTab> {
   }
 
   Future<void> _initHive() async {
-    if (Hive.isBoxOpen('vocab')) {
-      _box = Hive.box('vocab');
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final boxName = 'vocab_${user.uid}';
+
+    if (Hive.isBoxOpen(boxName)) {
+      _box = Hive.box(boxName);
     } else {
-      _box = await Hive.openBox('vocab');
+      _box = await Hive.openBox(boxName);
     }
+
     setState(() => _hiveReady = true);
 
-    // Start Firestore listener and periodic sync
     _startFirestoreListenerForCurrentUser();
-    _pendingSyncTimer = Timer.periodic(Duration(seconds: 30), (_) {
-      _syncPendingItems();
-    });
+
+    _pendingSyncTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _syncPendingItems(),
+    );
   }
 
   void _startFirestoreListenerForCurrentUser() {
@@ -97,17 +123,10 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
         if (change.type == DocumentChangeType.removed) {
           await _box.delete(doc.id);
-          if (mounted) setState(() {});
           continue;
         }
 
         final data = doc.data();
-
-        final createdAtIso =
-            parseCreatedAt(data?['createdAt']).toIso8601String();
-
-        final updatedAtIso =
-            parseCreatedAt(data?['updatedAt']).toIso8601String();
 
         final map = <String, dynamic>{
           'word': data?['word'] ?? '',
@@ -119,21 +138,13 @@ class _VocabularyTabState extends State<VocabularyTab> {
               ? (data!['nextReview'] as Timestamp).toDate().toIso8601String()
               : null,
           'remoteId': doc.id,
-          '__localKey': doc.id,
           'pending': false,
           'deleted': false,
-          'createdAt': createdAtIso,
-          'updatedAt': updatedAtIso,
+          'createdAt': parseCreatedAt(data?['createdAt']).toIso8601String(),
+          'updatedAt': parseCreatedAt(data?['updatedAt']).toIso8601String(),
         };
 
-        final raw = _box.get(doc.id);
-        final existing =
-            raw != null ? Map<String, dynamic>.from(raw as Map) : null;
-
-        if (existing == null || existing['pending'] != true) {
-          await _box.put(doc.id, map);
-          if (mounted) setState(() {});
-        }
+        await _box.put(doc.id, map);
       }
     });
   }
@@ -149,7 +160,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
       final raw = _box.get(key);
       if (raw == null) continue;
 
-      final v = Map<String, dynamic>.from(raw);
+      final v = _toStringKeyedMap(raw);
 
       if (v['deleted'] == true) {
         final remoteId = v['remoteId'];
@@ -285,7 +296,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
       // Use docId to get Hive value
       final raw = _box.get(docId);
-      final v = raw != null ? Map<String, dynamic>.from(raw as Map) : null;
+      final v = raw != null ? _toStringKeyedMap(raw) : null;
 
       if (v == null) {
         final newItem = {
@@ -444,7 +455,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
     try {
       final raw = _box.get(docId);
-      final v = raw != null ? Map<String, dynamic>.from(raw as Map) : null;
+      final v = raw != null ? _toStringKeyedMap(raw) : null;
       if (v == null) return;
 
       if ((v['remoteId'] ?? null) == null &&
@@ -477,7 +488,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
     _firestoreSub?.cancel();
     _pendingSyncTimer?.cancel();
 
-    if (Hive.isBoxOpen('vocab')) {
+    if (_box.isOpen) {
       _box.compact();
       _box.close();
     }
@@ -532,10 +543,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
             ValueListenableBuilder(
               valueListenable: _box.listenable(),
               builder: (context, Box box, _) {
-                // Convert to list of maps and exclude deleted flag
+                // Convert to list of maps (defensively convert dynamic keys -> String)
                 final all = box.values
-                    .map((e) => Map<String, dynamic>.from(
-                        (e as Map).cast<String, dynamic>()))
+                    .map((e) => _toStringKeyedMap(e))
                     .where((m) => m['deleted'] != true)
                     .toList();
 

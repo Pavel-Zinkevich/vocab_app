@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 /// Login page supporting email/password sign-in and Google sign-in.
 class LoginPage extends StatefulWidget {
@@ -44,8 +45,17 @@ class AuthService {
     }
   }
 
-  Future<void> signOut() async {
-    await _auth.signOut();
+  Future<void> logout() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    // 1. clear local cache
+    if (user != null) {
+      await Hive.deleteBoxFromDisk('history_${user.uid}');
+      // await Hive.deleteBoxFromDisk('vocab_${user.uid}');
+    }
+
+    // 2. sign out
+    await FirebaseAuth.instance.signOut();
   }
 }
 
@@ -56,6 +66,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _loading = false;
   String? _error;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -125,19 +136,46 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _signInWithGoogle() async {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = true;
         _error = null;
       });
-
-    final user = await AuthService().signInWithGoogle(context);
-    if (user != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Signed in as ${user.email}')));
     }
 
-    if (mounted) setState(() => _loading = false);
+    try {
+      final user = await AuthService().signInWithGoogle(context);
+
+      if (user == null) return;
+
+      // ✅ Save/update Firestore user
+      final userDoc =
+          FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+      final docSnapshot = await userDoc.get();
+
+      if (!docSnapshot.exists) {
+        await userDoc.set({
+          'email': user.email,
+          'createdAt': FieldValue.serverTimestamp(),
+          'authProvider': 'google',
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Signed in as ${user.email}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Google sign-in failed: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 
   Future<void> _showForgotPasswordDialog() async {
@@ -209,15 +247,30 @@ class _LoginPageState extends State<LoginPage> {
                       SizedBox(height: 12),
                       TextFormField(
                         controller: _passwordController,
-                        decoration: InputDecoration(labelText: 'Password'),
-                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
+                        ),
+                        obscureText: _obscurePassword,
                         validator: (v) {
                           if (v == null || v.isEmpty)
                             return 'Password is required';
                           if (v.length < 6)
                             return 'Password must be at least 6 characters';
-                          if (!RegExp(r'[A-Za-z]').hasMatch(v))
+                          if (!RegExp(r'[A-Za-z]').hasMatch(v)) {
                             return 'Password must contain at least one letter';
+                          }
                           return null;
                         },
                       ),

@@ -28,11 +28,17 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _initHive() async {
-    if (Hive.isBoxOpen('history')) {
-      _box = Hive.box('history');
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final boxName = 'history_${user.uid}';
+
+    if (Hive.isBoxOpen(boxName)) {
+      _box = Hive.box(boxName);
     } else {
-      _box = await Hive.openBox('history');
+      _box = await Hive.openBox(boxName);
     }
+
     setState(() => _hiveReady = true);
     _startListener();
   }
@@ -49,7 +55,7 @@ class _HistoryPageState extends State<HistoryPage> {
       try {
         return DateTime.parse(ts).toUtc().toIso8601String();
       } catch (_) {
-        return ts;
+        return DateTime.utc(2000).toIso8601String();
       }
     }
     return ts.toString();
@@ -63,6 +69,7 @@ class _HistoryPageState extends State<HistoryPage> {
         _firestore.collection('users').doc(user.uid).collection('history');
 
     _firestoreSub?.cancel();
+
     _firestoreSub = coll
         .orderBy('lookedUpAt', descending: true)
         .limit(100)
@@ -73,20 +80,41 @@ class _HistoryPageState extends State<HistoryPage> {
 
         if (change.type == DocumentChangeType.removed) {
           await _box.delete(doc.id);
-          if (mounted) setState(() {});
           continue;
         }
 
         final data = doc.data();
-        final map = <String, dynamic>{
+
+        final map = {
           'word': data?['word'] ?? '',
           'lookedUpAt': _toIso(data?['lookedUpAt']),
         };
 
         await _box.put(doc.id, map);
-        if (mounted) setState(() {});
       }
     });
+  }
+
+  Future<void> addWordToHistory(String word) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final coll =
+        _firestore.collection('users').doc(user.uid).collection('history');
+
+    // 1. add new word
+    await coll.add({
+      'word': word,
+      'lookedUpAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. get latest 101 items
+    final snapshot =
+        await coll.orderBy('lookedUpAt', descending: true).limit(101).get();
+
+    if (snapshot.docs.length > 100) {
+      await snapshot.docs.last.reference.delete();
+    }
   }
 
   Future<void> _clearHistory() async {
@@ -153,8 +181,7 @@ class _HistoryPageState extends State<HistoryPage> {
   @override
   void dispose() {
     _firestoreSub?.cancel();
-    if (Hive.isBoxOpen('history')) {
-      _box.compact();
+    if (_box.isOpen) {
       _box.close();
     }
     super.dispose();
@@ -180,10 +207,24 @@ class _HistoryPageState extends State<HistoryPage> {
           ? ValueListenableBuilder(
               valueListenable: _box.listenable(),
               builder: (context, Box box, _) {
-                final all = box.values
-                    .map((e) => Map<String, dynamic>.from(
-                        (e as Map).cast<String, dynamic>()))
-                    .toList();
+                // Defensive conversion: Hive may return Map<dynamic,dynamic>
+                // at runtime. Convert keys to String to avoid cast errors.
+                final all = box.values.map((e) {
+                  if (e is Map<String, dynamic>)
+                    return Map<String, dynamic>.from(e);
+                  if (e is Map) {
+                    final out = <String, dynamic>{};
+                    e.forEach((k, v) {
+                      try {
+                        out[k?.toString() ?? ''] = v;
+                      } catch (_) {
+                        // ignore malformed key
+                      }
+                    });
+                    return out;
+                  }
+                  return <String, dynamic>{};
+                }).toList();
 
                 all.sort((a, b) {
                   final pa = DateTime.tryParse(a['lookedUpAt'] ?? '') ??

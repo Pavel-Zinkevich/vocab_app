@@ -6,6 +6,20 @@ Color getColor(BuildContext context, int count, int maxCount) {
   return colors.heatFromCount(count, maxCount);
 }
 
+Color getHeatColor(BuildContext context, int value, int maxCount) {
+  final colors = context.colors;
+
+  if (maxCount == 0) return colors.heatEmpty;
+
+  final ratio = value / maxCount;
+
+  if (ratio <= 0) return colors.heatEmpty;
+  if (ratio < 0.25) return colors.heatLow;
+  if (ratio < 0.5) return colors.heatMidLow;
+  if (ratio < 0.75) return colors.heatMid;
+  return colors.heatHigh;
+}
+
 Widget buildLegend(int maxCount, BuildContext context) {
   return Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -41,7 +55,7 @@ Widget buildLegend(int maxCount, BuildContext context) {
           );
         },
         child: Text(
-          "Learn how we count words",
+          "How we count words",
           style: TextStyle(
             color: Theme.of(context).extension<AppSemanticColors>()?.infoLink,
             fontWeight: FontWeight.w500,
@@ -52,36 +66,34 @@ Widget buildLegend(int maxCount, BuildContext context) {
         children: [
           Text(
             "Less",
-            style: TextStyle(
-              color: Theme.of(context)
-                  .extension<AppSemanticColors>()
-                  ?.textForBackground(Theme.of(context)
-                      .extension<AppSemanticColors>()!
-                      .background),
-            ),
+            style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(width: 8),
           Row(
             children: List.generate(5, (index) {
-              final value = ((index + 1) / 5) * maxCount;
+              final colors = [
+                context.colors.heatEmpty,
+                context.colors.heatLow,
+                context.colors.heatMidLow,
+                context.colors.heatMid,
+                context.colors.heatHigh,
+              ];
 
               return Container(
                 width: 14,
                 height: 14,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
-                  color: getColor(context, value.toInt(), maxCount),
+                  color: colors[index],
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: Colors.black12),
-                  boxShadow: value > 0
-                      ? const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 2,
-                            offset: Offset(1, 1),
-                          ),
-                        ]
-                      : [],
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 2,
+                      offset: Offset(1, 1),
+                    ),
+                  ],
                 ),
               );
             }),
@@ -89,16 +101,10 @@ Widget buildLegend(int maxCount, BuildContext context) {
           const SizedBox(width: 8),
           Text(
             "More",
-            style: TextStyle(
-              color: Theme.of(context)
-                  .extension<AppSemanticColors>()
-                  ?.textForBackground(Theme.of(context)
-                      .extension<AppSemanticColors>()!
-                      .background),
-            ),
+            style: TextStyle(color: Colors.grey),
           ),
         ],
-      ),
+      )
     ],
   );
 }
