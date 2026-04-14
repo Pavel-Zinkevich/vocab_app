@@ -1,11 +1,63 @@
 import 'package:flutter/material.dart';
-import '../pages/flashcards_page.dart';
-// migrated to Theme.of(context) colors
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class TrainingTab extends StatelessWidget {
+import '../pages/flashcards_page.dart';
+
+class TrainingTab extends StatefulWidget {
+  @override
+  State<TrainingTab> createState() => _TrainingTabState();
+}
+
+class _TrainingTabState extends State<TrainingTab> {
+  final db = FirebaseFirestore.instance;
+  final auth = FirebaseAuth.instance;
+
+  int dueCount = 0;
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadDueCount();
+  }
+
+  Future<void> loadDueCount() async {
+    final u = auth.currentUser;
+    if (u == null) return;
+
+    final snap =
+        await db.collection('users').doc(u.uid).collection('vocabulary').get();
+
+    final now = DateTime.now();
+
+    final words = snap.docs.map((d) => d.data()).toList();
+
+    final due = words.where((w) {
+      final n = w['nextReview'];
+      final t = n is Timestamp ? n.toDate() : DateTime.tryParse('$n');
+      return t == null || t.isBefore(now);
+    }).length;
+
+    if (!mounted) return;
+
+    setState(() {
+      dueCount = due;
+      loading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final bg = Theme.of(context).scaffoldBackgroundColor;
+
+    final textColor =
+        Theme.of(context).floatingActionButtonTheme.foregroundColor ??
+            Theme.of(context).colorScheme.onPrimary;
+
+    final cardColor =
+        Theme.of(context).floatingActionButtonTheme.backgroundColor ??
+            Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: bg,
@@ -15,12 +67,14 @@ class TrainingTab extends StatelessWidget {
         title: Text(
           "Training",
           style: TextStyle(
-              color: Theme.of(context).appBarTheme.titleTextStyle?.color ??
-                  Theme.of(context).colorScheme.onSurface),
+            color: Theme.of(context).appBarTheme.titleTextStyle?.color ??
+                Theme.of(context).colorScheme.onSurface,
+          ),
         ),
         iconTheme: IconThemeData(
-            color: Theme.of(context).appBarTheme.iconTheme?.color ??
-                Theme.of(context).colorScheme.onSurface),
+          color: Theme.of(context).appBarTheme.iconTheme?.color ??
+              Theme.of(context).colorScheme.onSurface,
+        ),
       ),
       body: Center(
         child: GestureDetector(
@@ -28,15 +82,13 @@ class TrainingTab extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => FlashcardsPage()),
-            );
+            ).then((_) => loadDueCount());
           },
           child: Container(
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color:
-                  Theme.of(context).floatingActionButtonTheme.backgroundColor ??
-                      Theme.of(context).colorScheme.primary,
+              color: cardColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: const [
                 BoxShadow(
@@ -51,21 +103,15 @@ class TrainingTab extends StatelessWidget {
               children: [
                 Icon(
                   Icons.style,
-                  color: Theme.of(context)
-                          .floatingActionButtonTheme
-                          .foregroundColor ??
-                      Theme.of(context).colorScheme.onPrimary,
+                  color: textColor,
                   size: 30,
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  "Flashcards",
+                  loading ? "Flashcards" : "Flashcards ($dueCount)",
                   style: TextStyle(
                     fontSize: 20,
-                    color: Theme.of(context)
-                            .floatingActionButtonTheme
-                            .foregroundColor ??
-                        Theme.of(context).colorScheme.onPrimary,
+                    color: textColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
