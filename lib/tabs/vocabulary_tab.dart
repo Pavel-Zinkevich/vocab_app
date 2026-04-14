@@ -47,6 +47,19 @@ class _VocabularyTabState extends State<VocabularyTab> {
     return DateTime.utc(2000);
   }
 
+  String _normalize(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[àáâäãå]'), 'a')
+        .replaceAll(RegExp(r'[ç]'), 'c')
+        .replaceAll(RegExp(r'[èéêë]'), 'e')
+        .replaceAll(RegExp(r'[ìíîï]'), 'i')
+        .replaceAll(RegExp(r'[ñ]'), 'n')
+        .replaceAll(RegExp(r'[òóôöõ]'), 'o')
+        .replaceAll(RegExp(r'[ùúûü]'), 'u')
+        .replaceAll(RegExp(r'[ýÿ]'), 'y');
+  }
+
   // Safely convert Hive-stored maps which may be Map<dynamic,dynamic>
   // into Map<String,dynamic> to avoid runtime type cast errors.
   Map<String, dynamic> _toStringKeyedMap(dynamic raw) {
@@ -567,11 +580,12 @@ class _VocabularyTabState extends State<VocabularyTab> {
                 });
 
                 final filtered = all.where((item) {
-                  final word = (item['word'] ?? '').toString().toLowerCase();
+                  final word = _normalize((item['word'] ?? '').toString());
                   final translation =
-                      (item['translation'] ?? '').toString().toLowerCase();
-                  return word.contains(_searchQuery) ||
-                      translation.contains(_searchQuery);
+                      _normalize((item['translation'] ?? '').toString());
+                  final query = _normalize(_searchQuery);
+
+                  return word.contains(query) || translation.contains(query);
                 }).toList();
 
                 if (filtered.isEmpty) {
