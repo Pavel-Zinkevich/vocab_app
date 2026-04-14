@@ -5,378 +5,235 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
 
 class FlashcardsPage extends StatefulWidget {
+  const FlashcardsPage({super.key});
   @override
   State<FlashcardsPage> createState() => _FlashcardsPageState();
 }
 
 class _FlashcardsPageState extends State<FlashcardsPage>
     with SingleTickerProviderStateMixin {
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
-
-  List<Map<String, dynamic>> _words = [];
-  Map<String, dynamic>? _currentWord;
-
-  bool _showTranslation = false;
-  bool _isLoading = true;
-  int _initialWordCount = 0;
-
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  final List<Duration> _intervals = [
-    Duration(hours: 3),
-    Duration(hours: 6),
-    Duration(hours: 12),
-    Duration(days: 1),
-    Duration(days: 2),
-    Duration(days: 5),
-  ];
+  final db = FirebaseFirestore.instance, auth = FirebaseAuth.instance;
+  final gaps = [3, 6, 12, 24, 48, 120].map((h) => Duration(hours: h)).toList();
+  final rnd = Random();
+  List<Map<String, dynamic>> words = [];
+  Map<String, dynamic>? current;
+  bool loading = true, showBack = false;
+  int initial = 0;
+  double drag = 0;
+  late final AnimationController c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 400));
+  late final a = Tween(begin: 0.0, end: pi).animate(c);
 
   @override
   void initState() {
     super.initState();
-
-    _controller = AnimationController(
-      duration: Duration(milliseconds: 400),
-      vsync: this,
-    );
-
-    _animation = Tween<double>(begin: 0, end: pi).animate(_controller);
-
-    _loadWords();
-  }
-
-  String getStatus(int step) {
-    if (step >= _intervals.length) return 'learned';
-    if (step >= 2) return 'known';
-    return 'learning';
-  }
-
-  Future<void> _loadWords() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    final snapshot = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('vocabulary')
-        .get();
-
-    final words = snapshot.docs.map((doc) {
-      final data = doc.data();
-
-      return {
-        'id': doc.id,
-        ...data,
-        'status': data['status'] ?? 'learning',
-        'step': data['step'] ?? 0,
-        'nextReview': data['nextReview'],
-      };
-    }).toList();
-
-    setState(() {
-      _words = words;
-      _initialWordCount = words.length;
-      _isLoading = false;
-      _pickRandomWord();
-    });
-  }
-
-  void _pickRandomWord() {
-    if (_words.isEmpty) {
-      _currentWord = null;
-      return;
-    }
-
-    final now = DateTime.now();
-    final random = Random();
-
-    final dueWords = _words.where((w) {
-      DateTime? next;
-      if (w['nextReview'] is Timestamp) {
-        next = (w['nextReview'] as Timestamp).toDate();
-      } else if (w['nextReview'] is String) {
-        next = DateTime.tryParse(w['nextReview']);
-      }
-      return next == null || next.isBefore(now);
-    }).toList();
-
-    final learnedWords = _words.where((w) => w['status'] == 'learned').toList();
-
-    if (dueWords.isNotEmpty) {
-      _currentWord = dueWords[random.nextInt(dueWords.length)];
-    } else if (learnedWords.isNotEmpty && random.nextDouble() < 0.2) {
-      _currentWord = learnedWords[random.nextInt(learnedWords.length)];
-    } else {
-      _currentWord = null;
-    }
-
-    _showTranslation = false;
-  }
-
-  Future<void> _handleSwipe(bool knewIt) async {
-    if (_currentWord == null) return;
-
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    final docRef = _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('vocabulary')
-        .doc(_currentWord!['id']);
-
-    int step = _currentWord!['step'] ?? 0;
-
-    if (knewIt) {
-      step++;
-    } else {
-      step = max(0, step - 1);
-    }
-
-    final status = getStatus(step);
-
-    await docRef.update({
-      'step': step,
-      'status': status,
-      'nextReview': Timestamp.fromDate(
-        DateTime.now().add(
-          _intervals[min(step, _intervals.length - 1)],
-        ),
-      ),
-      'updatedAt': Timestamp.now(),
-    });
-
-    setState(() {
-      _words.removeWhere((w) => w['id'] == _currentWord!['id']);
-      _pickRandomWord();
-    });
-  }
-
-  String _safeText(dynamic value, String fallback) {
-    if (value == null) return fallback;
-    if (value is String && value.trim().isEmpty) return fallback;
-    return value.toString();
-  }
-
-  Color _cardColor(BuildContext context) {
-    final status = _currentWord?['status'] ?? 'learning';
-
-    switch (status) {
-      case 'known':
-        return Theme.of(context).extension<AppSemanticColors>()?.known ??
-            AppSemanticColors.light().known;
-      case 'learned':
-        return Theme.of(context).extension<AppSemanticColors>()?.learned ??
-            AppSemanticColors.light().learned;
-      default:
-        return Theme.of(context).extension<AppSemanticColors>()?.learning ??
-            AppSemanticColors.light().learning;
-    }
-  }
-
-  Widget _buildCard(BuildContext context, String text) {
-    final bg = _cardColor(context);
-
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 24),
-      height: 250,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          )
-        ],
-      ),
-      child: Center(
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Theme.of(context)
-                    .extension<AppSemanticColors>()
-                    ?.textForBackground(bg) ??
-                Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
+    load();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    c.dispose();
     super.dispose();
   }
 
+  Future<void> load() async {
+    final u = auth.currentUser;
+    if (u == null) return;
+    final s =
+        await db.collection('users').doc(u.uid).collection('vocabulary').get();
+    words = s.docs
+        .map((d) => {
+              'id': d.id,
+              ...d.data(),
+              'step': d['step'] ?? 0,
+              'status': d['status'] ?? 'learning'
+            })
+        .toList();
+    setState(() {
+      initial = words.length;
+      loading = false;
+      pick();
+    });
+  }
+
+  void pick() {
+    if (words.isEmpty) {
+      current = null;
+      return;
+    }
+    final now = DateTime.now();
+    final due = words.where((w) {
+      final n = w['nextReview'];
+      final t = n is Timestamp ? n.toDate() : DateTime.tryParse('$n');
+      return t == null || t.isBefore(now);
+    }).toList();
+    final learned = words.where((w) => w['status'] == 'learned').toList();
+    current = due.isNotEmpty
+        ? due[rnd.nextInt(due.length)]
+        : learned.isNotEmpty && rnd.nextDouble() < .2
+            ? learned[rnd.nextInt(learned.length)]
+            : null;
+    showBack = false;
+    c.reset();
+  }
+
+  String status(int step) => step >= gaps.length
+      ? 'learned'
+      : step >= 2
+          ? 'known'
+          : 'learning';
+  String txt(v, f) => v == null || '$v'.trim().isEmpty ? f : '$v';
+
+  Future<void> swipe(bool knew) async {
+    final u = auth.currentUser;
+    if (u == null || current == null) return;
+    int step = (current!['step'] as int?) ?? 0;
+    step = knew ? step + 1 : max<int>(0, step - 1);
+    await db
+        .collection('users')
+        .doc(u.uid)
+        .collection('vocabulary')
+        .doc(current!['id'])
+        .update({
+      'step': step,
+      'status': status(step),
+      'updatedAt': Timestamp.now(),
+      'nextReview': Timestamp.fromDate(
+          DateTime.now().add(gaps[min(step, gaps.length - 1)]))
+    });
+    setState(() {
+      words.removeWhere((w) => w['id'] == current!['id']);
+      drag = 0;
+      pick();
+    });
+  }
+
+  Color cardColor() {
+    final ext = Theme.of(context).extension<AppSemanticColors>() ??
+        AppSemanticColors.light();
+    switch (current?['status']) {
+      case 'known':
+        return ext.known;
+      case 'learned':
+        return ext.learned;
+      default:
+        return ext.learning;
+    }
+  }
+
+  Color bg() {
+    final base = Theme.of(context).scaffoldBackgroundColor;
+    if (drag == 0) return base;
+    final p = (drag.abs() / 180).clamp(0.0, 1.0);
+    final t = drag > 0
+        ? context.colors.dangerBg
+        : context.colors.heatHigh.withOpacity(.25);
+    return Color.lerp(base, t, p)!;
+  }
+
+  PreferredSizeWidget bar() => AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      title: Text('Flashcards'));
+
+  Widget card(String t) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        height: 250,
+        decoration: BoxDecoration(
+            color: cardColor(),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: const [
+              BoxShadow(
+                  color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))
+            ]),
+        child: Center(
+            child: Text(t,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: (Theme.of(context).extension<AppSemanticColors>() ??
+                            AppSemanticColors.light())
+                        .textForBackground(cardColor())))),
+      );
+
+  Widget centerBody(String t) => Center(child: Text(t));
+
   @override
   Widget build(BuildContext context) {
-    final bg = Theme.of(context).scaffoldBackgroundColor;
+    Widget body = loading
+        ? const Center(child: CircularProgressIndicator())
+        : initial == 0
+            ? centerBody('No words yet')
+            : current == null
+                ? centerBody('No words to review right now 🎉')
+                : Column(
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () {
+                              c.isCompleted ? c.reverse() : c.forward();
+                              Future.delayed(const Duration(milliseconds: 200),
+                                  () {
+                                setState(() => showBack = !showBack);
+                              });
+                            },
+                            child: Dismissible(
+                              key: ValueKey(current!['id']),
+                              direction: DismissDirection.horizontal,
+                              onUpdate: (d) => setState(() => drag = d
+                                      .progress *
+                                  (d.direction == DismissDirection.startToEnd
+                                      ? 180
+                                      : -180)),
+                              onDismissed: (d) =>
+                                  swipe(d == DismissDirection.endToStart),
+                              onResize: () => setState(() => drag = 0),
+                              child: AnimatedBuilder(
+                                animation: a,
+                                builder: (_, __) {
+                                  final back = a.value > pi / 2;
+                                  return Transform(
+                                    alignment: Alignment.center,
+                                    transform: Matrix4.identity()
+                                      ..setEntry(3, 2, .001)
+                                      ..rotateY(a.value),
+                                    child: back
+                                        ? Transform(
+                                            alignment: Alignment.center,
+                                            transform: Matrix4.rotationY(pi),
+                                            child: card(txt(
+                                                current!['translation'],
+                                                'No translation')),
+                                          )
+                                        : card(
+                                            txt(current!['word'], 'No word')),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 30),
+                        child: Column(
+                          children: [
+                            Text('Tap to flip'),
+                            SizedBox(height: 10),
+                            Text('Swipe left = knew it | right = didn’t'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
 
-    if (_isLoading) {
-      return Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(
-          backgroundColor: bg,
-          elevation: 0,
-          title: Text(
-            "Flashcards",
-            style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
-          ),
-        ),
-        body: Center(
-          child: CircularProgressIndicator(
-              color:
-                  Theme.of(context).floatingActionButtonTheme.backgroundColor ??
-                      Theme.of(context).colorScheme.primary),
-        ),
-      );
-    }
-
-    if (_initialWordCount == 0) {
-      return Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(
-          backgroundColor: bg,
-          elevation: 0,
-          title: Text(
-            "Flashcards",
-            style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
-          ),
-        ),
-        body: Center(
-          child: Text("No words yet",
-              style: TextStyle(
-                  color: Theme.of(context)
-                          .floatingActionButtonTheme
-                          .backgroundColor ??
-                      Theme.of(context).colorScheme.primary)),
-        ),
-      );
-    }
-
-    if (_currentWord == null) {
-      return Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(
-          backgroundColor: bg,
-          elevation: 0,
-          title: Text(
-            "Flashcards",
-            style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
-          ),
-        ),
-        body: Center(
-          child: Text(
-            "No words to review right now 🎉",
-            style: TextStyle(
-              color:
-                  Theme.of(context).floatingActionButtonTheme.backgroundColor ??
-                      Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: bg,
-        elevation: 0,
-        title: Text(
-          "Flashcards",
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onBackground,
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          /// 👇 This takes all available space and centers the card
-          Expanded(
-            child: Center(
-              child: GestureDetector(
-                onTap: () {
-                  if (_controller.isCompleted) {
-                    _controller.reverse();
-                  } else {
-                    _controller.forward();
-                  }
-
-                  Future.delayed(Duration(milliseconds: 200), () {
-                    setState(() {
-                      _showTranslation = !_showTranslation;
-                    });
-                  });
-                },
-                child: Dismissible(
-                  key: ValueKey(_currentWord!['id']),
-                  direction: DismissDirection.horizontal,
-                  onDismissed: (direction) {
-                    _handleSwipe(direction == DismissDirection.endToStart);
-                  },
-                  child: AnimatedBuilder(
-                    animation: _animation,
-                    builder: (context, child) {
-                      final isUnder = (_animation.value > pi / 2);
-
-                      return Transform(
-                        transform: Matrix4.identity()
-                          ..setEntry(3, 2, 0.001)
-                          ..rotateY(_animation.value),
-                        alignment: Alignment.center,
-                        child: isUnder
-                            ? Transform(
-                                alignment: Alignment.center,
-                                transform: Matrix4.rotationY(pi),
-                                child: _buildCard(
-                                    context,
-                                    _safeText(_currentWord?['translation'],
-                                        "No translation")),
-                              )
-                            : _buildCard(context,
-                                _safeText(_currentWord?['word'], "No word")),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          /// 👇 Fixed bottom section (won’t move anymore)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 30),
-            child: Column(
-              children: [
-                Text(
-                  "Tap to flip",
-                  style: TextStyle(
-                      color: Theme.of(context)
-                              .floatingActionButtonTheme
-                              .backgroundColor ??
-                          Theme.of(context).colorScheme.primary),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  "Swipe left = knew it | right = didn’t",
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onBackground,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        color: bg(),
+        child: Scaffold(
+            backgroundColor: Colors.transparent, appBar: bar(), body: body));
   }
 }
