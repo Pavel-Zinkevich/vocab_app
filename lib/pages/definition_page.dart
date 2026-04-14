@@ -89,7 +89,14 @@ String _cleanTranslation(String raw) {
 
   // Remove grammar tags
   final grammarPattern = RegExp(
-    r'\b(vtr|vi|adj|adv|prép|expr|ind|loc|impers|prep| pron| v|insep|phrasal|v pron|interj| n |nm|nf|npl|v expr|v aux|v past p|vtr \+ prep|vtr \+ refl)\b',
+    r'\b('
+    r'vtr|vi|adj|adv|prép|expr|ind|loc|'
+    r'countable noun|uncountable noun|'
+    r'impers|prep|pron|v|insep|phrasal|v pron|interj|'
+    r'nm|nf|npl|n|'
+    r'v expr|v aux|v past p|'
+    r'vtr \+ prep|vtr \+ refl'
+    r')\b',
     caseSensitive: false,
   );
   cleaned = cleaned.replaceAll(grammarPattern, '');

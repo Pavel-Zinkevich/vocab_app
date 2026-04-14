@@ -265,31 +265,46 @@ class _VocabularyTabState extends State<VocabularyTab> {
     }
 
     showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Add Word', style: Theme.of(context).textTheme.titleLarge),
-            SizedBox(height: 8),
-            TextField(
-                controller: wordController,
-                decoration: InputDecoration(hintText: 'Word')),
-            SizedBox(height: 8),
-            TextField(
-                controller: translationController,
-                decoration: InputDecoration(hintText: 'Translation')),
-            SizedBox(height: 8),
-            TextField(
-                controller: contextController,
-                decoration: InputDecoration(hintText: 'Context')),
-            SizedBox(height: 12),
-            ElevatedButton(onPressed: addWord, child: Text('Add')),
-          ]),
-        ),
-      ),
-    );
+        context: context,
+        builder: (context) => Dialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Add Word',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      SizedBox(height: 8),
+                      TextField(
+                        controller: wordController,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        decoration: InputDecoration(hintText: 'Word'),
+                      ),
+                      SizedBox(height: 8),
+                      TextField(
+                        controller: translationController,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        decoration: InputDecoration(hintText: 'Translation'),
+                      ),
+                      SizedBox(height: 8),
+                      TextField(
+                        controller: contextController,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        decoration: InputDecoration(hintText: 'Context'),
+                      ),
+                      SizedBox(height: 12),
+                      ElevatedButton(onPressed: addWord, child: Text('Add')),
+                    ],
+                  ),
+                ),
+              ),
+            ));
   }
 
   void _showEditWordDialog(String docId, Map<String, dynamic> existingData) {
@@ -351,28 +366,46 @@ class _VocabularyTabState extends State<VocabularyTab> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Edit Word', style: Theme.of(context).textTheme.titleLarge),
-            SizedBox(height: 8),
-            TextField(
-                controller: wordController,
-                decoration: InputDecoration(hintText: 'Word')),
-            SizedBox(height: 8),
-            TextField(
-                controller: translationController,
-                decoration: InputDecoration(hintText: 'Translation')),
-            SizedBox(height: 8),
-            TextField(
-                controller: contextController,
-                decoration: InputDecoration(hintText: 'Context')),
-            SizedBox(height: 12),
-            ElevatedButton(onPressed: updateWord, child: Text('Update')),
-          ]),
-        ),
-      ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Edit Word',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  SizedBox(height: 8),
+                  TextField(
+                    controller: wordController,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(hintText: 'Word'),
+                  ),
+                  SizedBox(height: 8),
+                  TextField(
+                    controller: translationController,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(hintText: 'Translation'),
+                  ),
+                  SizedBox(height: 8),
+                  TextField(
+                    controller: contextController,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(hintText: 'Context'),
+                  ),
+                  SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: updateWord,
+                    child: Text('Update'),
+                  ),
+                ],
+              ),
+            ),
+          )),
     );
   }
 
