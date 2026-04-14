@@ -3,52 +3,78 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class FlashcardsPage extends StatefulWidget {
   const FlashcardsPage({super.key});
+
   @override
   State<FlashcardsPage> createState() => _FlashcardsPageState();
 }
 
 class _FlashcardsPageState extends State<FlashcardsPage>
     with SingleTickerProviderStateMixin {
-  final db = FirebaseFirestore.instance, auth = FirebaseAuth.instance;
+  final db = FirebaseFirestore.instance;
+  final auth = FirebaseAuth.instance;
+
   final gaps = [3, 6, 12, 24, 48, 120].map((h) => Duration(hours: h)).toList();
   final rnd = Random();
+
   List<Map<String, dynamic>> words = [];
   Map<String, dynamic>? current;
-  bool loading = true, showBack = false;
+
+  bool loading = true;
+  bool showBack = false;
+
   int initial = 0;
   double drag = 0;
+
   late final AnimationController c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 400));
+    vsync: this,
+    duration: const Duration(milliseconds: 400),
+  );
+
   late final a = Tween(begin: 0.0, end: pi).animate(c);
+
+  final AudioPlayer _player = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
+    _player.setSource(AssetSource('sounds/knew.wav'));
+    _player.setSource(AssetSource('sounds/didnt_know.mp3'));
     load();
   }
 
   @override
   void dispose() {
     c.dispose();
+    _player.dispose();
     super.dispose();
+  }
+
+  Future<void> playSwipeSound(bool knew) async {
+    final file = knew ? 'sounds/knew.wav' : 'sounds/didnt_know.mp3';
+    _player.stop(); // important to avoid queue delay
+    _player.play(AssetSource(file));
   }
 
   Future<void> load() async {
     final u = auth.currentUser;
     if (u == null) return;
+
     final s =
         await db.collection('users').doc(u.uid).collection('vocabulary').get();
+
     words = s.docs
         .map((d) => {
               'id': d.id,
               ...d.data(),
               'step': d['step'] ?? 0,
-              'status': d['status'] ?? 'learning'
+              'status': d['status'] ?? 'learning',
             })
         .toList();
+
     setState(() {
       initial = words.length;
       loading = false;
@@ -61,18 +87,23 @@ class _FlashcardsPageState extends State<FlashcardsPage>
       current = null;
       return;
     }
+
     final now = DateTime.now();
+
     final due = words.where((w) {
       final n = w['nextReview'];
       final t = n is Timestamp ? n.toDate() : DateTime.tryParse('$n');
       return t == null || t.isBefore(now);
     }).toList();
+
     final learned = words.where((w) => w['status'] == 'learned').toList();
+
     current = due.isNotEmpty
         ? due[rnd.nextInt(due.length)]
         : learned.isNotEmpty && rnd.nextDouble() < .2
             ? learned[rnd.nextInt(learned.length)]
             : null;
+
     showBack = false;
     c.reset();
   }
@@ -82,35 +113,55 @@ class _FlashcardsPageState extends State<FlashcardsPage>
       : step >= 2
           ? 'known'
           : 'learning';
+
   String txt(v, f) => v == null || '$v'.trim().isEmpty ? f : '$v';
 
-  Future<void> swipe(bool knew) async {
+  Future<void> _handleSwipe(Map<String, dynamic> item, bool knew) async {
+    playSwipeSound(knew);
+
     final u = auth.currentUser;
-    if (u == null || current == null) return;
-    int step = (current!['step'] as int?) ?? 0;
+    if (u == null) return;
+
+    int step = (item['step'] as int?) ?? 0;
     step = knew ? step + 1 : max<int>(0, step - 1);
+
     await db
         .collection('users')
         .doc(u.uid)
         .collection('vocabulary')
-        .doc(current!['id'])
+        .doc(item['id'])
         .update({
       'step': step,
       'status': status(step),
       'updatedAt': Timestamp.now(),
       'nextReview': Timestamp.fromDate(
-          DateTime.now().add(gaps[min(step, gaps.length - 1)]))
+        DateTime.now().add(gaps[min(step, gaps.length - 1)]),
+      ),
     });
+  }
+
+  void swipe(DismissDirection direction) {
+    final item = current;
+    if (item == null) return;
+
+    final knew = direction == DismissDirection.endToStart;
+
+    // 🔥 play instantly (no await)
+    playSwipeSound(knew);
+
     setState(() {
-      words.removeWhere((w) => w['id'] == current!['id']);
+      words.removeWhere((w) => w['id'] == item['id']);
       drag = 0;
       pick();
     });
+
+    _handleSwipe(item, knew);
   }
 
   Color cardColor() {
     final ext = Theme.of(context).extension<AppSemanticColors>() ??
         AppSemanticColors.light();
+
     switch (current?['status']) {
       case 'known':
         return ext.known;
@@ -124,44 +175,54 @@ class _FlashcardsPageState extends State<FlashcardsPage>
   Color bg() {
     final base = Theme.of(context).scaffoldBackgroundColor;
     if (drag == 0) return base;
-    final p = (drag.abs() / 180).clamp(0.0, 1.0);
-    final t = drag > 0
-        ? context.colors.dangerBg
-        : context.colors.heatHigh.withOpacity(.25);
+
+    final p = (drag.abs() / 180).clamp(0.0, 0.6);
+
+    final t = drag > 0 ? context.colors.danger : context.colors.known;
+
     return Color.lerp(base, t, p)!;
   }
 
   PreferredSizeWidget bar() => AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      title: Text('Flashcards'));
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text('Flashcards'),
+      );
 
   Widget card(String t) => Container(
         margin: const EdgeInsets.symmetric(horizontal: 24),
         height: 250,
         decoration: BoxDecoration(
-            color: cardColor(),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: const [
-              BoxShadow(
-                  color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))
-            ]),
+          color: cardColor(),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 8,
+              offset: Offset(0, 4),
+            )
+          ],
+        ),
         child: Center(
-            child: Text(t,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: (Theme.of(context).extension<AppSemanticColors>() ??
-                            AppSemanticColors.light())
-                        .textForBackground(cardColor())))),
+          child: Text(
+            t,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: (Theme.of(context).extension<AppSemanticColors>() ??
+                      AppSemanticColors.light())
+                  .textForBackground(cardColor()),
+            ),
+          ),
+        ),
       );
 
   Widget centerBody(String t) => Center(child: Text(t));
 
   @override
   Widget build(BuildContext context) {
-    Widget body = loading
+    final body = loading
         ? const Center(child: CircularProgressIndicator())
         : initial == 0
             ? centerBody('No words yet')
@@ -173,27 +234,34 @@ class _FlashcardsPageState extends State<FlashcardsPage>
                         child: Center(
                           child: GestureDetector(
                             onTap: () {
-                              c.isCompleted ? c.reverse() : c.forward();
-                              Future.delayed(const Duration(milliseconds: 200),
-                                  () {
-                                setState(() => showBack = !showBack);
-                              });
+                              if (c.isCompleted) {
+                                c.reverse();
+                              } else {
+                                c.forward();
+                              }
+
+                              Future.delayed(
+                                const Duration(milliseconds: 200),
+                                () {
+                                  setState(() => showBack = !showBack);
+                                },
+                              );
                             },
                             child: Dismissible(
                               key: ValueKey(current!['id']),
                               direction: DismissDirection.horizontal,
-                              onUpdate: (d) => setState(() => drag = d
-                                      .progress *
-                                  (d.direction == DismissDirection.startToEnd
-                                      ? 180
-                                      : -180)),
-                              onDismissed: (d) =>
-                                  swipe(d == DismissDirection.endToStart),
-                              onResize: () => setState(() => drag = 0),
+                              onUpdate: (d) => setState(() {
+                                drag = d.progress *
+                                    (d.direction == DismissDirection.startToEnd
+                                        ? 180
+                                        : -180);
+                              }),
+                              onDismissed: swipe,
                               child: AnimatedBuilder(
                                 animation: a,
                                 builder: (_, __) {
                                   final back = a.value > pi / 2;
+
                                   return Transform(
                                     alignment: Alignment.center,
                                     transform: Matrix4.identity()
@@ -204,11 +272,14 @@ class _FlashcardsPageState extends State<FlashcardsPage>
                                             alignment: Alignment.center,
                                             transform: Matrix4.rotationY(pi),
                                             child: card(txt(
-                                                current!['translation'],
-                                                'No translation')),
+                                              current!['translation'],
+                                              'No translation',
+                                            )),
                                           )
-                                        : card(
-                                            txt(current!['word'], 'No word')),
+                                        : card(txt(
+                                            current!['word'],
+                                            'No word',
+                                          )),
                                   );
                                 },
                               ),
@@ -230,10 +301,14 @@ class _FlashcardsPageState extends State<FlashcardsPage>
                   );
 
     return AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-        color: bg(),
-        child: Scaffold(
-            backgroundColor: Colors.transparent, appBar: bar(), body: body));
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      color: bg(),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: bar(),
+        body: body,
+      ),
+    );
   }
 }

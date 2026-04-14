@@ -94,58 +94,90 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _signIn() async {
-    final box = await Hive.openBox('login_cache');
-    final raw = box.get('emails');
-
-    List<String> emails = [];
-
-    if (raw is List) {
-      emails = raw.map((e) => e.toString()).toList();
-    }
-
-    if (!emails.contains(_emailController.text.trim())) {
-      emails.add(_emailController.text.trim());
-      await box.put('emails', emails);
-    }
-
-    if (mounted) setState(() => _error = null);
-
     if (!_formKey.currentState!.validate()) return;
 
-    if (mounted) setState(() => _loading = true);
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+
     try {
+      // ---------------------------
+      // 1. SAVE LAST 2 EMAILS (FIXED)
+      // ---------------------------
+      final box = await Hive.openBox('login_cache');
+      final email = _emailController.text.trim();
+
+      final raw = box.get('emails');
+      List<String> emails = [];
+
+      if (raw is List) {
+        emails = raw.map((e) => e.toString()).toList();
+      }
+
+      // remove if exists (move to most recent position)
+      emails.remove(email);
+
+      // add as latest
+      emails.add(email);
+
+      // keep only last 2
+      if (emails.length > 2) {
+        emails = emails.sublist(emails.length - 2);
+      }
+
+      await box.put('emails', emails);
+
+      // update UI list (autocomplete)
+      if (mounted) {
+        setState(() {
+          _savedEmails = List<String>.from(emails.reversed);
+        });
+      }
+
+      // ---------------------------
+      // 2. FIREBASE SIGN IN
+      // ---------------------------
       UserCredential userCredential =
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
+        email: email,
         password: _passwordController.text.trim(),
       );
 
       User? user = userCredential.user;
 
       if (user != null) {
-        // Refresh user to get updated emailVerified status
         await user.reload();
         user = FirebaseAuth.instance.currentUser;
 
+        // ---------------------------
+        // 3. EMAIL VERIFICATION CHECK
+        // ---------------------------
         if (!user!.emailVerified) {
-          // Send verification email. Do NOT sign the user out here so the
-          // EmailVerificationPage remains visible until the user verifies
-          // or manually signs out. The AuthGate listens to Firebase auth
-          // changes and will show the verification page for signed-in,
-          // unverified users.
           try {
             await user.sendEmailVerification();
           } catch (_) {}
-          if (mounted)
-            setState(() => _error =
-                'Please verify your email before logging in. A verification email has been sent.');
+
+          if (mounted) {
+            setState(() {
+              _error =
+                  'Please verify your email before logging in. A verification email has been sent.';
+              _loading = false;
+            });
+          }
           return;
         }
 
-        // ✅ Only add verified users to Firestore
+        // ---------------------------
+        // 4. SAVE USER TO FIRESTORE
+        // ---------------------------
         final userDoc =
             FirebaseFirestore.instance.collection('users').doc(user.uid);
+
         final docSnapshot = await userDoc.get();
+
         if (!docSnapshot.exists) {
           await userDoc.set({
             'email': user.email,
@@ -153,17 +185,32 @@ class _LoginPageState extends State<LoginPage> {
           });
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Welcome back, ${user.email}!')),
-        );
+        // success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Welcome back, ${user.email}!')),
+          );
+        }
       }
     } on FirebaseAuthException catch (e) {
-      if (mounted) setState(() => _error = 'Invalid email or password');
+      if (mounted) {
+        setState(() {
+          _error = 'Invalid email or password';
+        });
+      }
       debugPrint('FirebaseAuth error code: ${e.code}, message: ${e.message}');
     } catch (e) {
-      if (mounted) setState(() => _error = 'Unexpected error: $e');
+      if (mounted) {
+        setState(() {
+          _error = 'Unexpected error: $e';
+        });
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -374,7 +421,25 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ],
 
-                      // SAVED EMAILS (FIXED: safer UI)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text("Don't have an account?"),
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => RegisterPage(),
+                                      ),
+                                    );
+                                  },
+                            child: const Text("Register"),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
