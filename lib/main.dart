@@ -106,6 +106,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: PageView(
+        physics: const PageScrollPhysics(),
         controller: _pageController,
         onPageChanged: (index) {
           setState(() => _currentIndex = index);

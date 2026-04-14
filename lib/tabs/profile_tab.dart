@@ -105,6 +105,7 @@ class _ProfileTabState extends State<ProfileTab>
       ),
       body: TabBarView(
         controller: _tabController,
+        physics: const NeverScrollableScrollPhysics(),
         children: [
           /// ================= INFO TAB =================
           StreamBuilder<List<Map<String, dynamic>>>(
