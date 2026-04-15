@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../pages/words_category_page.dart';
 
 class ProgressPainter extends CustomPainter {
   final int learning;
@@ -65,6 +66,8 @@ class ProgressPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
+// ======================================================
+
 class ProgressPage extends StatelessWidget {
   final List<Map<String, dynamic>> words;
 
@@ -114,72 +117,21 @@ class ProgressPage extends StatelessWidget {
     }).toList();
   }
 
-  // ---------------- BOTTOM SHEET ----------------
-  void _showWordsSheet(
-    BuildContext context,
-    String title,
-    List<Map<String, dynamic>> filtered,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.6,
-          maxChildSize: 0.9,
-          builder: (_, controller) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(
-                    "$title (${filtered.length})",
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? const Center(
-                            child: Text("No words found"),
-                          )
-                        : ListView.builder(
-                            controller: controller,
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final w = filtered[index];
-                              return ListTile(
-                                title: Text(w['word'] ?? ''),
-                                subtitle: Text(w['translation'] ?? ''),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
     final stats = _calculateStats();
-    final total = words.length == 0 ? 1 : words.length;
+    final total = words.isEmpty ? 1 : words.length;
 
     final colors = Theme.of(context).extension<AppSemanticColors>()!;
     final learningColor = colors.learning;
     final knownColor = colors.known;
     final learnedColor = colors.learned;
+
+    final items = [
+      ("Learning", stats['learning']!, learningColor, 'learning'),
+      ("Known", stats['known']!, knownColor, 'known'),
+      ("Learned", stats['learned']!, learnedColor, 'learned'),
+    ];
 
     return Center(
       child: Column(
@@ -223,30 +175,17 @@ class ProgressPage extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // ---------------- CLICKABLE STATS ----------------
-          _statRow(
-            context,
-            "Learning",
-            stats['learning']!,
-            learningColor,
-            _filterByStatus('learning'),
-          ),
-          const SizedBox(height: 8),
-          _statRow(
-            context,
-            "Known",
-            stats['known']!,
-            knownColor,
-            _filterByStatus('known'),
-          ),
-          const SizedBox(height: 8),
-          _statRow(
-            context,
-            "Learned",
-            stats['learned']!,
-            learnedColor,
-            _filterByStatus('learned'),
-          ),
+          // ---------------- STATS LIST (NO DUPLICATION) ----------------
+          ...items.map((e) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _statRow(
+                  context,
+                  e.$1,
+                  e.$2,
+                  e.$3,
+                  _filterByStatus(e.$4),
+                ),
+              )),
         ],
       ),
     );
@@ -261,7 +200,15 @@ class ProgressPage extends StatelessWidget {
     List<Map<String, dynamic>> filteredWords,
   ) {
     return InkWell(
-      onTap: () => _showWordsSheet(context, title, filteredWords),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WordsCategoryPage(
+            words: filteredWords,
+            allWords: words,
+          ),
+        ),
+      ),
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

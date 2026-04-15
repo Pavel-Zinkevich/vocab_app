@@ -125,7 +125,9 @@ class _ProfileTabState extends State<ProfileTab>
           // user-facing fields used by ProgressPage and lists
           'word': data['word'] ?? '',
           'translation': data['translation'] ?? '',
-          'category': data['category'] ?? 'uncategorized',
+          // include status (e.g. 'learning'/'known'/'learned') if present
+          'status': data['status'] ?? data['category'] ?? '',
+          'category': data['category'] ?? '',
         };
       }).toList();
     });
