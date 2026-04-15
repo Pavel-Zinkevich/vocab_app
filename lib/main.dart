@@ -1,23 +1,15 @@
-import 'package:flutter/material.dart';
-import 'tabs/vocabulary_tab.dart';
-import 'tabs/training_tab.dart';
-import 'tabs/profile_tab.dart';
-
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
+import 'firebase_options.dart';
+import 'pages/email_verification_page.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
-import 'pages/email_verification_page.dart';
-
-import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
-
+import 'tabs/profile_tab.dart';
+import 'tabs/training_tab.dart';
+import 'tabs/vocabulary_tab.dart';
 import 'theme/theme_controller.dart';
 
 Future<void> main() async {
@@ -28,24 +20,34 @@ Future<void> main() async {
   );
 
   await Hive.initFlutter();
-  await Hive.openBox('vocab');
 
-  runApp(VocabApp());
+  runApp(const MyApp());
 }
 
-class VocabApp extends StatelessWidget {
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeController.themeMode,
-      builder: (context, mode, _) {
+      builder: (context, themeMode, _) {
         return MaterialApp(
-          title: 'Vocab App',
           debugShowCheckedModeBanner: false,
+          title: 'Vocab App',
           theme: ThemeController.lightTheme,
           darkTheme: ThemeController.darkTheme,
-          themeMode: mode,
-          home: AuthGate(),
+          themeMode: themeMode,
+          home: const AuthGate(),
+          routes: {
+            '/login': (_) => LoginPage(),
+            '/register': (_) => RegisterPage(),
+            '/verify-email': (_) => EmailVerificationPage(),
+            '/home': (_) => const MainTabScaffold(),
+          },
+          onUnknownRoute: (_) => MaterialPageRoute(
+            builder: (_) => const AuthGate(),
+          ),
         );
       },
     );
@@ -53,20 +55,17 @@ class VocabApp extends StatelessWidget {
 }
 
 class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.userChanges(),
+      stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(
-            // Use theme scaffold background so waiting screen follows the
-            // selected theme mode.
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              child: CircularProgressIndicator(),
             ),
           );
         }
@@ -81,64 +80,55 @@ class AuthGate extends StatelessWidget {
           return EmailVerificationPage();
         }
 
-        return HomePage();
+        return const MainTabScaffold();
       },
     );
   }
 }
 
-class HomePage extends StatefulWidget {
+class MainTabScaffold extends StatefulWidget {
+  const MainTabScaffold({super.key});
+
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<MainTabScaffold> createState() => _MainTabScaffoldState();
 }
 
-class _HomePageState extends State<HomePage> {
-  int _currentIndex = 0;
-  final PageController _pageController = PageController();
+class _MainTabScaffoldState extends State<MainTabScaffold> {
+  int _selectedIndex = 0;
 
-  final _pages = [
-    VocabularyTab(),
+  late final List<Widget> _pages = [
+    const VocabularyTab(),
     TrainingTab(),
     ProfileTab(),
   ];
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  void _onItemTapped(int index) {
+    if (!mounted) return;
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageView(
-        physics: const PageScrollPhysics(),
-        controller: _pageController,
-        onPageChanged: (index) {
-          setState(() => _currentIndex = index);
-        },
+      body: IndexedStack(
+        index: _selectedIndex,
         children: _pages,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) {
-          setState(() => _currentIndex = i);
-          _pageController.animateToPage(
-            i,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        },
-        items: const [
-          BottomNavigationBarItem(
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _onItemTapped,
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.book),
             label: 'Vocabulary',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.school),
+          NavigationDestination(
+            icon: Icon(Icons.fitness_center),
             label: 'Training',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.person),
             label: 'Profile',
           ),

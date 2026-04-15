@@ -1,21 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:async';
+
+import '../models/vocab_item.dart';
 import '../pages/definition_page.dart';
 import '../theme/app_colors.dart';
-import '../models/vocab_item.dart';
-import 'package:uuid/uuid.dart';
-
 import '../theme/sparkle_decorator.dart';
+import '../service/vocabulary_tab_service.dart';
 
-/// VocabularyTab
-///
-/// Local-first vocabulary list. Uses Hive for instant UI and Firestore for
-/// durable remote storage. Local edits are marked with `pending: true` and
-/// synced in the background. Remote writes insert a remote-keyed entry
-/// before removing local-only keys to avoid ValueListenableBuilder flicker.
 class VocabularyTab extends StatefulWidget {
   const VocabularyTab({Key? key}) : super(key: key);
 
@@ -24,73 +15,7 @@ class VocabularyTab extends StatefulWidget {
 }
 
 class _VocabularyTabState extends State<VocabularyTab> {
-  bool _syncing = false;
-  // ---- ADD THIS FUNCTION HERE ----
-  DateTime parseCreatedAt(dynamic value) {
-    if (value == null) return DateTime.utc(2000);
-
-    if (value is Timestamp) {
-      return value.toDate().toUtc();
-    }
-
-    if (value is num) {
-      try {
-        return DateTime.fromMillisecondsSinceEpoch(value.toInt()).toUtc();
-      } catch (_) {
-        return DateTime.utc(2000);
-      }
-    }
-
-    if (value is String) {
-      try {
-        return DateTime.parse(value).toUtc();
-      } catch (_) {
-        return DateTime.utc(2000);
-      }
-    }
-
-    return DateTime.utc(2000);
-  }
-
-  String _normalize(String input) {
-    return input
-        .toLowerCase()
-        .replaceAll(RegExp(r'[àáâäãå]'), 'a')
-        .replaceAll(RegExp(r'[ç]'), 'c')
-        .replaceAll(RegExp(r'[èéêë]'), 'e')
-        .replaceAll(RegExp(r'[ìíîï]'), 'i')
-        .replaceAll(RegExp(r'[ñ]'), 'n')
-        .replaceAll(RegExp(r'[òóôöõ]'), 'o')
-        .replaceAll(RegExp(r'[ùúûü]'), 'u')
-        .replaceAll(RegExp(r'[ýÿ]'), 'y');
-  }
-
-  // Safely convert Hive-stored maps which may be Map<dynamic,dynamic>
-  // into Map<String,dynamic> to avoid runtime type cast errors.
-  Map<String, dynamic> _toStringKeyedMap(dynamic raw) {
-    if (raw == null) return <String, dynamic>{};
-    if (raw is Map<String, dynamic>) return Map<String, dynamic>.from(raw);
-    if (raw is Map) {
-      final out = <String, dynamic>{};
-      raw.forEach((k, v) {
-        try {
-          out[k?.toString() ?? ''] = v;
-        } catch (_) {
-          // ignore malformed keys
-        }
-      });
-      return out;
-    }
-    return <String, dynamic>{};
-  }
-
-  // Firebase and Hive instances
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
-  late Box _box;
-  bool _hiveReady = false;
-  StreamSubscription? _firestoreSub;
-  Timer? _pendingSyncTimer;
+  final VocabularyTabController _service = VocabularyTabController();
 
   final GlobalKey<ScaffoldMessengerState> _scaffoldKey =
       GlobalKey<ScaffoldMessengerState>();
@@ -105,375 +30,186 @@ class _VocabularyTabState extends State<VocabularyTab> {
   }
 
   Future<void> _initHive() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    final boxName = 'vocab_${user.uid}';
-
-    _box = Hive.isBoxOpen(boxName)
-        ? Hive.box(boxName)
-        : await Hive.openBox(boxName);
+    await _service.initHive();
 
     if (!mounted) return;
-
-    setState(() => _hiveReady = true);
-
-    _startFirestoreListenerForCurrentUser();
-
-    _pendingSyncTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _syncPendingItems(),
-    );
+    setState(() {});
   }
 
-  void _startFirestoreListenerForCurrentUser() {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    final coll =
-        _firestore.collection('users').doc(user.uid).collection('vocabulary');
-
-    _firestoreSub?.cancel();
-
-    _firestoreSub = coll.snapshots().listen((snapshot) async {
-      for (final change in snapshot.docChanges) {
-        final doc = change.doc;
-        final data = doc.data();
-
-        final localKey = doc.id;
-
-        // DELETE
-        if (change.type == DocumentChangeType.removed) {
-          await _box.delete(localKey);
-          continue;
-        }
-
-        if (data == null) continue;
-
-        final remoteItem = <String, dynamic>{
-          'word': data['word'] ?? '',
-          'translation': data['translation'] ?? '',
-          'context': data['context'] ?? '',
-          'status': data['status'] ?? 'learning',
-          'step': data['step'] ?? 0,
-          'nextReview': data['nextReview'] != null
-              ? (data['nextReview'] as Timestamp).toDate().toIso8601String()
-              : null,
-          'remoteId': doc.id,
-          'deleted': false,
-          'pending': false,
-          'createdAt': parseCreatedAt(data['createdAt']).toIso8601String(),
-          'updatedAt': parseCreatedAt(data['updatedAt']).toIso8601String(),
-          '__localKey': localKey,
-        };
-
-        final localRaw = _box.get(localKey);
-        final local =
-            localRaw is Map ? Map<String, dynamic>.from(localRaw) : null;
-
-        if (local == null) {
-          await _box.put(localKey, remoteItem);
-          continue;
-        }
-
-        if (local['pending'] == true || local['deleted'] == true) {
-          continue;
-        }
-
-        final merged = <String, dynamic>{
-          ...local,
-          ...remoteItem,
-          '__localKey': localKey,
-        };
-
-        await _box.put(localKey, merged);
-      }
-    });
-  }
-
-  Future<void> _syncPendingItems() async {
-    if (_syncing) return;
-    _syncing = true;
-
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return;
-
-      final coll =
-          _firestore.collection('users').doc(user.uid).collection('vocabulary');
-
-      final keys = List.from(_box.keys);
-
-      for (final key in keys) {
-        final raw = _box.get(key);
-        if (raw == null) continue;
-
-        final v = _toStringKeyedMap(raw);
-
-        // DELETE
-        if (v['deleted'] == true && v['pending'] == true) {
-          try {
-            final remoteId = v['remoteId'];
-            if (remoteId != null) {
-              await coll.doc(remoteId).delete();
-            }
-          } catch (_) {}
-
-          await _box.delete(key);
-          continue;
-        }
-
-        if (v['pending'] != true) continue;
-
-        DateTime? nextReviewDate;
-        final nr = v['nextReview'];
-        if (nr is String) {
-          nextReviewDate = DateTime.tryParse(nr);
-        }
-
-        final payload = {
-          'word': v['word'] ?? '',
-          'translation': v['translation'] ?? '',
-          'context': v['context'] ?? '',
-          'status': v['status'] ?? 'learning',
-          'step': v['step'] ?? 0,
-          'nextReview': nextReviewDate != null
-              ? Timestamp.fromDate(nextReviewDate)
-              : FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
-
-        try {
-          final remoteId = v['remoteId'];
-
-          // CREATE: set remote doc ID equal to our local key to keep mapping simple
-          if (remoteId == null) {
-            try {
-              await coll.doc(key).set(payload);
-            } catch (_) {
-              // if setting by key fails, fall back to add()
-              final docRef = await coll.add(payload);
-              final updated = Map<String, dynamic>.from(v);
-              updated['remoteId'] = docRef.id;
-              updated['pending'] = false;
-              updated['deleted'] = false;
-              updated['__localKey'] = docRef.id;
-              await _box.put(docRef.id, updated);
-              if (docRef.id != key) {
-                await _box.delete(key);
-              }
-              continue;
-            }
-
-            final updated = Map<String, dynamic>.from(v);
-            updated['remoteId'] = key;
-            updated['pending'] = false;
-            updated['deleted'] = false;
-            updated['__localKey'] = key;
-
-            await _box.put(key, updated);
-          }
-
-          // UPDATE
-          else {
-            await coll.doc(remoteId).set(payload, SetOptions(merge: true));
-
-            final updated = Map<String, dynamic>.from(v);
-            updated['pending'] = false;
-            updated['updatedAt'] = DateTime.now().toIso8601String();
-            updated['__localKey'] = remoteId;
-
-            await _box.put(key, updated);
-          }
-        } catch (_) {
-          continue;
-        }
-      }
-    } finally {
-      _syncing = false;
-    }
-  }
-
-  Future<void> _showAddWordDialog() async {
-    final wordController = TextEditingController();
-    final translationController = TextEditingController();
-    final contextController = TextEditingController();
-
-    Future<void> addWord() async {
-      final word = wordController.text.trim();
-      if (word.isEmpty) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Please enter a word')));
-        return;
-      }
-
-      final now = DateTime.now().toUtc(); // force UTC
-      final localKey = const Uuid().v4();
-
-      final item = {
-        'word': word,
-        'translation': translationController.text.trim(),
-        'context': contextController.text.trim(),
-        'status': 'learning',
-        'step': 0,
-        'nextReview': now.toIso8601String(),
-        'pending': true,
-        'deleted': false,
-        'createdAt': now.toIso8601String(),
-        'updatedAt': now.toIso8601String(),
-        '__localKey': localKey, // ⭐ ДОБАВИЛИ
-      };
-
-      await _box.put(localKey, item);
-      if (mounted) setState(() {});
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added locally (sync pending)')));
-      _syncPendingItems();
-    }
-
-    showDialog(
-        context: context,
-        builder: (context) => Dialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Add Word',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      SizedBox(height: 8),
-                      TextField(
-                        controller: wordController,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        decoration: InputDecoration(hintText: 'Word'),
-                      ),
-                      SizedBox(height: 8),
-                      TextField(
-                        controller: translationController,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        decoration: InputDecoration(hintText: 'Translation'),
-                      ),
-                      SizedBox(height: 8),
-                      TextField(
-                        controller: contextController,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        decoration: InputDecoration(hintText: 'Context'),
-                      ),
-                      SizedBox(height: 12),
-                      ElevatedButton(onPressed: addWord, child: Text('Add')),
-                    ],
-                  ),
-                ),
-              ),
-            ));
-  }
-
-  void _showEditWordDialog(String docId, VocabItem existing) {
-    final wordController = TextEditingController(text: existing.word);
+  Future<void> _showWordFormSheet({
+    required String title,
+    required String actionLabel,
+    String? docId,
+    VocabItem? existing,
+  }) async {
+    final wordController = TextEditingController(text: existing?.word ?? '');
     final translationController =
-        TextEditingController(text: existing.translation);
-    final contextController = TextEditingController(text: existing.context);
+        TextEditingController(text: existing?.translation ?? '');
+    final contextController =
+        TextEditingController(text: existing?.context ?? '');
 
-    Future<void> updateWord() async {
-      final word = wordController.text.trim();
-      if (word.isEmpty) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Please enter a word')));
-        return;
-      }
+    final theme = Theme.of(context);
+    final colors = context.colors;
+    final bgColor =
+        theme.dialogTheme.backgroundColor ?? theme.colorScheme.surface;
 
-      // Use docId to get Hive value
-      final raw = _box.get(docId);
-      final v = raw != null ? _toStringKeyedMap(raw) : null;
-
-      if (v == null) {
-        final newItem = {
-          'word': word,
-          'translation': translationController.text.trim(),
-          'context': contextController.text.trim(),
-          'status': 'learning',
-          'step': 0,
-          'nextReview': DateTime.now().toIso8601String(),
-          'pending': true,
-          'deleted': false,
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-        };
-        await _box.put(docId, newItem);
-      } else {
-        final updated = Map<String, dynamic>.from(v);
-        updated['word'] = word;
-        updated['translation'] = translationController.text.trim();
-        updated['context'] = contextController.text.trim();
-        updated['pending'] = true;
-        updated['updatedAt'] = DateTime.now().toIso8601String();
-        updated['step'] = v['step'] ?? 0;
-        updated['nextReview'] = v['nextReview'];
-        updated['status'] = v['status'] ?? 'learning';
-        await _box.put(docId, updated);
-      }
-
-      if (mounted) {
-        Navigator.of(context).pop();
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Word updated (pending sync)')));
-      }
-
-      _syncPendingItems();
-    }
-
-    showDialog(
+    await showModalBottomSheet(
       context: context,
-      builder: (context) => Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      isScrollControlled: true,
+      backgroundColor: bgColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        Future<void> submit() async {
+          final word = wordController.text.trim();
+          if (word.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please enter a word')),
+            );
+            return;
+          }
+
+          if (existing == null) {
+            await _service.addWord(
+              word: word,
+              translation: translationController.text.trim(),
+              context: contextController.text.trim(),
+            );
+
+            if (mounted) {
+              setState(() {});
+              Navigator.of(sheetContext).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Added locally (sync pending)'),
+                ),
+              );
+            }
+          } else {
+            await _service.updateWord(
+              docId: docId ?? '',
+              word: word,
+              translation: translationController.text.trim(),
+              context: contextController.text.trim(),
+            );
+
+            if (mounted) {
+              setState(() {});
+              Navigator.of(sheetContext).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Word updated (pending sync)'),
+                ),
+              );
+            }
+          }
+        }
+
+        return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Edit Word',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  SizedBox(height: 8),
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: colors.textMuted.withOpacity(0.35),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    title,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimaryStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: wordController,
                     maxLines: null,
                     keyboardType: TextInputType.multiline,
-                    decoration: InputDecoration(hintText: 'Word'),
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Word',
+                      hintText: 'Enter word',
+                    ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: translationController,
                     maxLines: null,
                     keyboardType: TextInputType.multiline,
-                    decoration: InputDecoration(hintText: 'Translation'),
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Translation',
+                      hintText: 'Enter translation',
+                    ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: contextController,
                     maxLines: null,
                     keyboardType: TextInputType.multiline,
-                    decoration: InputDecoration(hintText: 'Context'),
+                    decoration: const InputDecoration(
+                      labelText: 'Context',
+                      hintText: 'Enter example or context',
+                    ),
                   ),
-                  SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: updateWord,
-                    child: Text('Update'),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: submit,
+                      icon: Icon(existing == null ? Icons.add : Icons.save),
+                      label: Text(actionLabel),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          )),
+          ),
+        );
+      },
+    );
+
+    wordController.dispose();
+    translationController.dispose();
+    contextController.dispose();
+  }
+
+  Future<void> _showAddWordDialog() async {
+    await _showWordFormSheet(
+      title: 'Add Word',
+      actionLabel: 'Add',
+    );
+  }
+
+  void _showEditWordDialog(String docId, VocabItem existing) {
+    _showWordFormSheet(
+      title: 'Edit Word',
+      actionLabel: 'Update',
+      docId: docId,
+      existing: existing,
     );
   }
 
@@ -508,32 +244,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   ),
                 );
 
-                final user = _auth.currentUser;
-                if (user != null) {
-                  final historyRef = _firestore
-                      .collection('users')
-                      .doc(user.uid)
-                      .collection('history');
-
-                  try {
-                    await historyRef.add({
-                      'word': word,
-                      'lookedUpAt': FieldValue.serverTimestamp(),
-                    });
-
-                    final snapshot = await historyRef
-                        .orderBy('lookedUpAt', descending: true)
-                        .get();
-
-                    if (snapshot.docs.length > 100) {
-                      for (var doc in snapshot.docs.skip(100)) {
-                        await historyRef.doc(doc.id).delete();
-                      }
-                    }
-                  } catch (_) {
-                    // offline safe
-                  }
-                }
+                await _service.recordLookupHistory(word);
               },
               child: const Text('Look Up'),
             ),
@@ -544,22 +255,25 @@ class _VocabularyTabState extends State<VocabularyTab> {
   }
 
   Future<void> _deleteWord(String docId) async {
-    final user = _auth.currentUser;
+    final user = _service.auth.currentUser;
     if (user == null) return;
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete Word?'),
-        content: Text('Are you sure you want to delete this word?'),
+        title: const Text('Delete Word?'),
+        content: const Text('Are you sure you want to delete this word?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -568,53 +282,39 @@ class _VocabularyTabState extends State<VocabularyTab> {
     if (confirm != true) return;
 
     try {
-      final raw = _box.get(docId);
-      final v = raw != null ? _toStringKeyedMap(raw) : null;
-      if (v == null) return;
-
-      if ((v['remoteId'] ?? null) == null &&
-          docId.toString().startsWith('local_')) {
-        await _box.delete(docId);
-      } else {
-        final updated = Map<String, dynamic>.from(v);
-        updated['deleted'] = true;
-        updated['pending'] = true;
-        updated['updatedAt'] = DateTime.now().toIso8601String();
-
-        await _box.put(docId, updated);
-        _syncPendingItems();
-      }
+      await _service.deleteWord(docId);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
             content: Text('Word deleted (pending sync)'),
-            duration: Duration(seconds: 1)));
+            duration: Duration(seconds: 1),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text('Failed to mark word deleted: $e'),
-            duration: Duration(seconds: 1)));
+            duration: const Duration(seconds: 1),
+          ),
+        );
       }
     }
   }
 
   @override
   void dispose() {
-    _firestoreSub?.cancel();
-    _pendingSyncTimer?.cancel();
-
     _searchController.dispose();
-
-    if (_box.isOpen) {
-      _box.close();
-    }
-
+    _service.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     Widget _buildCardContent(
       VocabItem item,
       String displayWord,
@@ -642,10 +342,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Theme.of(context)
-                          .extension<AppSemanticColors>()
-                          ?.iconBg ??
-                      Colors.grey,
+                  color: colors.iconBg,
                 ),
                 child: IconButton(
                   icon: Icon(
@@ -664,18 +361,12 @@ class _VocabularyTabState extends State<VocabularyTab> {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Theme.of(context)
-                          .extension<AppSemanticColors>()
-                          ?.dangerBg ??
-                      Colors.red.withOpacity(0.2),
+                  color: colors.dangerBg,
                 ),
                 child: IconButton(
                   icon: Icon(
                     Icons.close,
-                    color: Theme.of(context)
-                            .extension<AppSemanticColors>()
-                            ?.danger ??
-                        Colors.redAccent,
+                    color: colors.danger,
                   ),
                   onPressed: () => _deleteWord(
                     item.localKey ?? item.remoteId ?? '',
@@ -699,6 +390,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
     final Color textColor =
         Theme.of(context).appBarTheme.titleTextStyle?.color ??
             Theme.of(context).colorScheme.onSurface;
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
@@ -731,43 +423,45 @@ class _VocabularyTabState extends State<VocabularyTab> {
       ),
       body: Stack(
         children: [
-          if (!_hiveReady)
+          if (!_service.hiveReady)
             Center(
-                child: CircularProgressIndicator(
-                    color: Theme.of(context).colorScheme.primary))
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            )
           else
             ValueListenableBuilder(
-              valueListenable: _box.listenable(),
+              valueListenable: _service.box.listenable(),
               builder: (context, Box box, _) {
-                // Convert to list of VocabItem models (defensively convert dynamic keys -> String)
                 final all = box.values
-                    .map((e) => VocabItem.fromMap(_toStringKeyedMap(e)))
+                    .map((e) => VocabItem.fromMap(_service.toStringKeyedMap(e)))
                     .where((item) => item.deleted != true)
                     .toList();
 
-                // Sort newest-first by createdAt (best-effort parse)
                 all.sort((a, b) {
-                  final pa = parseCreatedAt(a.createdAt);
-                  final pb = parseCreatedAt(b.createdAt);
+                  final pa = _service.parseCreatedAt(a.createdAt);
+                  final pb = _service.parseCreatedAt(b.createdAt);
                   return pb.compareTo(pa);
                 });
 
                 final filtered = all.where((item) {
-                  final word = _normalize(item.word);
-                  final translation = _normalize(item.translation);
-                  final query = _normalize(_searchQuery);
+                  final word = _service.normalize(item.word);
+                  final translation = _service.normalize(item.translation);
+                  final query = _service.normalize(_searchQuery);
 
                   return word.contains(query) || translation.contains(query);
                 }).toList();
 
                 if (filtered.isEmpty) {
                   return Center(
-                      child: Text('No words yet. Tap + to add one.',
-                          style: TextStyle(
-                              fontSize: 16,
-                              color: Theme.of(context)
-                                  .extension<AppSemanticColors>()
-                                  ?.textSecondary)));
+                    child: Text(
+                      'No words yet. Tap + to add one.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  );
                 }
 
                 return ListView.builder(
@@ -776,15 +470,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   itemBuilder: (context, index) {
                     final VocabItem item = filtered[index];
 
-                    final bgColor = Theme.of(context)
-                            .extension<AppSemanticColors>()
-                            ?.fromStatus(item.status) ??
-                        Colors.grey;
-
-                    final textColor = Theme.of(context)
-                            .extension<AppSemanticColors>()
-                            ?.textForBackground(bgColor) ??
-                        Colors.white;
+                    final bgColor = colors.fromStatus(item.status);
+                    final textColor = colors.textForBackground(bgColor);
                     final subTextColor = textColor.withOpacity(0.7);
                     final displayWord = item.word;
                     final displayTranslation = item.translation;
@@ -832,10 +519,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Theme.of(context)
-                                              .extension<AppSemanticColors>()
-                                              ?.shadow ??
-                                          Colors.black26,
+                                      color: colors.shadow,
                                       blurRadius: 6,
                                       offset: const Offset(0, 4),
                                     ),
@@ -903,7 +587,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        extendedPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        extendedPadding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
