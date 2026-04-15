@@ -12,6 +12,12 @@ import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/email_verification_page.dart';
 
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+
 import 'theme/theme_controller.dart';
 
 Future<void> main() async {

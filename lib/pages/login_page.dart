@@ -182,6 +182,9 @@ class _LoginPageState extends State<LoginPage> {
           await userDoc.set({
             'email': user.email,
             'createdAt': FieldValue.serverTimestamp(),
+            'authProvider': 'password',
+            'name': user.email?.split('@')[0], // default name
+            'photoPath': null,
           });
         }
 
@@ -238,6 +241,9 @@ class _LoginPageState extends State<LoginPage> {
           'email': user.email,
           'createdAt': FieldValue.serverTimestamp(),
           'authProvider': 'google',
+          'name': user.displayName ?? user.email?.split('@')[0],
+          'photoPath':
+              user.photoURL, // Google profile image (optional fallback)
         });
       }
 
