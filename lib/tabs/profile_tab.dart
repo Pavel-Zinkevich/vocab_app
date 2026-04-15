@@ -251,11 +251,11 @@ class _ProfileTabState extends State<ProfileTab>
                                   ),
                                 ),
                                 const SizedBox(height: 5),
-                                const Text(
-                                  "Tap avatar to change photo • Tap name to edit",
-                                  style: TextStyle(
-                                      fontSize: 12, color: Colors.grey),
-                                ),
+                                // const Text(
+                                //   "Tap avatar to change photo • Tap name to edit",
+                                //   style: TextStyle(
+                                //       fontSize: 12, color: Colors.grey),
+                                // ),
                               ],
                             ),
                           ),

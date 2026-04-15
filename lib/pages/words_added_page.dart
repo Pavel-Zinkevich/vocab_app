@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
+import '../theme/sparkle_decorator.dart';
 
 class WordsAddedPage extends StatefulWidget {
   final DateTime selectedDate;
@@ -37,29 +38,21 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
   @override
   void initState() {
     super.initState();
-    //print("WordsAddedPage opened for date: ${widget.selectedDate}");
     _wordsFuture = _fetchWords();
   }
 
   Future<List<Map<String, dynamic>>> _fetchWords() async {
     final user = _auth.currentUser;
-    if (user == null) {
-      print("No user logged in.");
-      return [];
-    }
+    if (user == null) return [];
 
-    // --- Use local time instead of UTC to match Firestore timestamps ---
     final start = DateTime(
       widget.selectedDate.year,
       widget.selectedDate.month,
       widget.selectedDate.day,
     );
-    final end = start.add(Duration(days: 1));
-
-    //print("Querying words from $start to $end for user ${user.uid}");
+    final end = start.add(const Duration(days: 1));
 
     try {
-      // Firestore query with where + orderBy
       final snapshot = await _firestore
           .collection('users')
           .doc(user.uid)
@@ -69,25 +62,22 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
           .orderBy('createdAt', descending: true)
           .get();
 
-      //print("Documents found: ${snapshot.docs.length}");
-      // for (var doc in snapshot.docs) {
-      //   print("Word doc: ${doc.data()}");
-      // }
-
       return snapshot.docs.map((doc) {
         final data = doc.data();
         return {
           'word': data['word'] ?? '',
           'translation': data['translation'] ?? '',
           'context': data['context'] ?? '',
-          'status':
-              data.containsKey('status') ? data['status'] : 'uncategorized',
+          'status': data['status'] ?? 'uncategorized',
         };
       }).toList();
-    } catch (e) {
-      //print("Error fetching words: $e");
+    } catch (_) {
       return [];
     }
+  }
+
+  bool _isLearned(String status) {
+    return status.toLowerCase() == 'learned';
   }
 
   @override
@@ -97,10 +87,12 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
         backgroundColor:
             Theme.of(context).extension<AppSemanticColors>()?.navBar,
         title: Text(
-          'Words on ${widget.selectedDate.day} ${months[widget.selectedDate.month - 1]} ${widget.selectedDate.year}',
+          'Words on ${widget.selectedDate.day} '
+          '${months[widget.selectedDate.month - 1]} '
+          '${widget.selectedDate.year}',
           style: TextStyle(
-              color:
-                  Theme.of(context).extension<AppSemanticColors>()?.appBarText),
+            color: Theme.of(context).extension<AppSemanticColors>()?.appBarText,
+          ),
         ),
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
@@ -111,7 +103,6 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
           }
 
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            //print("No words returned from Firestore.");
             return const Center(
               child: Text(
                 'No words added on this day.',
@@ -121,65 +112,72 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
           }
 
           final words = snapshot.data!;
-          //print("Displaying ${words.length} words");
 
           return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: words.length,
-              itemBuilder: (context, index) {
-                final item = words[index];
+            padding: const EdgeInsets.all(16),
+            itemCount: words.length,
+            itemBuilder: (context, index) {
+              final item = words[index];
 
-                final bgColor = Theme.of(context)
-                        .extension<AppSemanticColors>()
-                        ?.fromStatus(item['status'] ?? 'learning') ??
-                    Colors.grey;
+              final status = item['status'] ?? 'learning';
 
-                final textColor = Theme.of(context)
-                        .extension<AppSemanticColors>()
-                        ?.textForBackground(bgColor) ??
-                    Colors.white;
+              final bgColor = Theme.of(context)
+                      .extension<AppSemanticColors>()
+                      ?.fromStatus(status) ??
+                  Colors.grey;
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: bgColor,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 6,
-                          offset: Offset(0, 4),
-                        )
-                      ],
+              final textColor = Theme.of(context)
+                      .extension<AppSemanticColors>()
+                      ?.textForBackground(bgColor) ??
+                  Colors.white;
+
+              final card = Container(
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 6,
+                      offset: Offset(0, 4),
+                    )
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item['word']} - ${item['translation']}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${item['word']} - ${item['translation']}',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
+                    if ((item['context'] ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        item['context'],
+                        style: TextStyle(
+                          color: textColor.withOpacity(0.8),
                         ),
-                        if ((item['context'] ?? '').isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            item['context'],
-                            style: TextStyle(
-                              color: textColor.withOpacity(0.8),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              });
+                      ),
+                    ],
+                  ],
+                ),
+              );
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child:
+                    _isLearned(status) ? SparkleDecorator(child: card) : card,
+              );
+            },
+          );
         },
       ),
     );

@@ -8,6 +8,8 @@ import '../theme/app_colors.dart';
 import '../models/vocab_item.dart';
 import 'package:uuid/uuid.dart';
 
+import '../theme/sparkle_decorator.dart';
+
 /// VocabularyTab
 ///
 /// Local-first vocabulary list. Uses Hive for instant UI and Firestore for
@@ -613,6 +615,85 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
   @override
   Widget build(BuildContext context) {
+    Widget _buildCardContent(
+      VocabItem item,
+      String displayWord,
+      String displayTranslation,
+      Color textColor,
+      Color subTextColor,
+    ) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$displayWord - $displayTranslation',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Theme.of(context)
+                          .extension<AppSemanticColors>()
+                          ?.iconBg ??
+                      Colors.grey,
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.edit,
+                    color: subTextColor,
+                  ),
+                  onPressed: () => _showEditWordDialog(
+                    item.localKey ?? item.remoteId ?? '',
+                    item,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Theme.of(context)
+                          .extension<AppSemanticColors>()
+                          ?.dangerBg ??
+                      Colors.red.withOpacity(0.2),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.close,
+                    color: Theme.of(context)
+                            .extension<AppSemanticColors>()
+                            ?.danger ??
+                        Colors.redAccent,
+                  ),
+                  onPressed: () => _deleteWord(
+                    item.localKey ?? item.remoteId ?? '',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (item.context.isNotEmpty) const SizedBox(height: 6),
+          if (item.context.isNotEmpty)
+            Text(
+              item.context,
+              style: TextStyle(color: subTextColor),
+            ),
+        ],
+      );
+    }
+
     final Color appBarColor = Theme.of(context).appBarTheme.backgroundColor ??
         Theme.of(context).colorScheme.surface;
     final Color textColor =
@@ -713,92 +794,65 @@ class _VocabularyTabState extends State<VocabularyTab> {
                       child: InkWell(
                         borderRadius: BorderRadius.circular(16),
                         onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    DefinitionPage(word: displayWord))),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Theme.of(context)
-                                        .extension<AppSemanticColors>()
-                                        ?.shadow ??
-                                    Colors.black26,
-                                blurRadius: 6,
-                                offset: Offset(0, 4),
-                              )
-                            ],
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '$displayWord - $displayTranslation',
-                                      style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: textColor),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Theme.of(context)
-                                                .extension<AppSemanticColors>()
-                                                ?.iconBg ??
-                                            Colors.grey),
-                                    child: IconButton(
-                                      icon: Icon(
-                                        Icons.edit,
-                                        color: subTextColor,
-                                      ),
-                                      onPressed: () => _showEditWordDialog(
-                                        item.localKey ?? item.remoteId ?? '',
-                                        item,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Theme.of(context)
-                                                .extension<AppSemanticColors>()
-                                                ?.dangerBg ??
-                                            Colors.red.withOpacity(0.2)),
-                                    child: IconButton(
-                                      icon: Icon(Icons.close,
-                                          color: Theme.of(context)
-                                                  .extension<
-                                                      AppSemanticColors>()
-                                                  ?.danger ??
-                                              Colors.redAccent),
-                                      onPressed: () => _deleteWord(
-                                          item.localKey ?? item.remoteId ?? ''),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (item.context.isNotEmpty) SizedBox(height: 6),
-                              if (item.context.isNotEmpty)
-                                Text(
-                                  item.context,
-                                  style: TextStyle(color: subTextColor),
-                                ),
-                            ],
+                          MaterialPageRoute(
+                            builder: (_) => DefinitionPage(word: displayWord),
                           ),
                         ),
+                        child: item.status == 'learned'
+                            ? SparkleDecorator(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: bgColor,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.amber.withOpacity(0.55),
+                                        blurRadius: 18,
+                                        spreadRadius: 2,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
+                                  child: _buildCardContent(
+                                    item,
+                                    displayWord,
+                                    displayTranslation,
+                                    textColor,
+                                    subTextColor,
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  color: bgColor,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Theme.of(context)
+                                              .extension<AppSemanticColors>()
+                                              ?.shadow ??
+                                          Colors.black26,
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                child: _buildCardContent(
+                                  item,
+                                  displayWord,
+                                  displayTranslation,
+                                  textColor,
+                                  subTextColor,
+                                ),
+                              ),
                       ),
                     );
                   },
