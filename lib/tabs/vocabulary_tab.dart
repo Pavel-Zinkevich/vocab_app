@@ -5,6 +5,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:async';
 import '../pages/definition_page.dart';
 import '../theme/app_colors.dart';
+import '../models/vocab_item.dart';
+import 'package:uuid/uuid.dart';
 
 /// VocabularyTab
 ///
@@ -20,6 +22,7 @@ class VocabularyTab extends StatefulWidget {
 }
 
 class _VocabularyTabState extends State<VocabularyTab> {
+  bool _syncing = false;
   // ---- ADD THIS FUNCTION HERE ----
   DateTime parseCreatedAt(dynamic value) {
     if (value == null) return DateTime.utc(2000);
@@ -105,11 +108,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
     final boxName = 'vocab_${user.uid}';
 
-    if (Hive.isBoxOpen(boxName)) {
-      _box = Hive.box(boxName);
-    } else {
-      _box = await Hive.openBox(boxName);
-    }
+    _box = Hive.isBoxOpen(boxName)
+        ? Hive.box(boxName)
+        : await Hive.openBox(boxName);
+
+    if (!mounted) return;
 
     setState(() => _hiveReady = true);
 
@@ -133,60 +136,94 @@ class _VocabularyTabState extends State<VocabularyTab> {
     _firestoreSub = coll.snapshots().listen((snapshot) async {
       for (final change in snapshot.docChanges) {
         final doc = change.doc;
+        final data = doc.data();
 
+        final localKey = doc.id;
+
+        // DELETE
         if (change.type == DocumentChangeType.removed) {
-          await _box.delete(doc.id);
+          await _box.delete(localKey);
           continue;
         }
 
-        final data = doc.data();
+        if (data == null) continue;
 
-        final map = <String, dynamic>{
-          'word': data?['word'] ?? '',
-          'translation': data?['translation'] ?? '',
-          'context': data?['context'] ?? '',
-          'status': data?['status'] ?? 'learning',
-          'step': data?['step'] ?? 0,
-          'nextReview': data?['nextReview'] != null
-              ? (data!['nextReview'] as Timestamp).toDate().toIso8601String()
+        final remoteItem = <String, dynamic>{
+          'word': data['word'] ?? '',
+          'translation': data['translation'] ?? '',
+          'context': data['context'] ?? '',
+          'status': data['status'] ?? 'learning',
+          'step': data['step'] ?? 0,
+          'nextReview': data['nextReview'] != null
+              ? (data['nextReview'] as Timestamp).toDate().toIso8601String()
               : null,
           'remoteId': doc.id,
-          'pending': false,
           'deleted': false,
-          'createdAt': parseCreatedAt(data?['createdAt']).toIso8601String(),
-          'updatedAt': parseCreatedAt(data?['updatedAt']).toIso8601String(),
+          'pending': false,
+          'createdAt': parseCreatedAt(data['createdAt']).toIso8601String(),
+          'updatedAt': parseCreatedAt(data['updatedAt']).toIso8601String(),
+          '__localKey': localKey,
         };
 
-        await _box.put(doc.id, map);
+        final localRaw = _box.get(localKey);
+        final local =
+            localRaw is Map ? Map<String, dynamic>.from(localRaw) : null;
+
+        if (local == null) {
+          await _box.put(localKey, remoteItem);
+          continue;
+        }
+
+        if (local['pending'] == true || local['deleted'] == true) {
+          continue;
+        }
+
+        final merged = <String, dynamic>{
+          ...local,
+          ...remoteItem,
+          '__localKey': localKey,
+        };
+
+        await _box.put(localKey, merged);
       }
     });
   }
 
   Future<void> _syncPendingItems() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
+    if (_syncing) return;
+    _syncing = true;
 
-    final coll =
-        _firestore.collection('users').doc(user.uid).collection('vocabulary');
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
 
-    for (final key in _box.keys) {
-      final raw = _box.get(key);
-      if (raw == null) continue;
+      final coll =
+          _firestore.collection('users').doc(user.uid).collection('vocabulary');
 
-      final v = _toStringKeyedMap(raw);
+      final keys = List.from(_box.keys);
 
-      if (v['deleted'] == true) {
-        final remoteId = v['remoteId'];
-        if (remoteId != null) {
-          await coll.doc(remoteId).delete();
+      for (final key in keys) {
+        final raw = _box.get(key);
+        if (raw == null) continue;
+
+        final v = _toStringKeyedMap(raw);
+
+        // DELETE
+        if (v['deleted'] == true && v['pending'] == true) {
+          try {
+            final remoteId = v['remoteId'];
+            if (remoteId != null) {
+              await coll.doc(remoteId).delete();
+            }
+          } catch (_) {}
+
+          await _box.delete(key);
+          continue;
         }
-        await _box.delete(key);
-        continue;
-      }
 
-      if (v['pending'] == true) {
+        if (v['pending'] != true) continue;
+
         DateTime? nextReviewDate;
-
         final nr = v['nextReview'];
         if (nr is String) {
           nextReviewDate = DateTime.tryParse(nr);
@@ -205,26 +242,54 @@ class _VocabularyTabState extends State<VocabularyTab> {
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
-        final remoteId = v['remoteId'];
+        try {
+          final remoteId = v['remoteId'];
 
-        if (remoteId == null) {
-          final docRef = await coll.add(payload);
+          // CREATE: set remote doc ID equal to our local key to keep mapping simple
+          if (remoteId == null) {
+            try {
+              await coll.doc(key).set(payload);
+            } catch (_) {
+              // if setting by key fails, fall back to add()
+              final docRef = await coll.add(payload);
+              final updated = Map<String, dynamic>.from(v);
+              updated['remoteId'] = docRef.id;
+              updated['pending'] = false;
+              updated['deleted'] = false;
+              updated['__localKey'] = docRef.id;
+              await _box.put(docRef.id, updated);
+              if (docRef.id != key) {
+                await _box.delete(key);
+              }
+              continue;
+            }
 
-          final newMap = Map<String, dynamic>.from(v);
-          newMap['remoteId'] = docRef.id;
-          newMap['pending'] = false;
+            final updated = Map<String, dynamic>.from(v);
+            updated['remoteId'] = key;
+            updated['pending'] = false;
+            updated['deleted'] = false;
+            updated['__localKey'] = key;
 
-          await _box.put(docRef.id, newMap);
-          await _box.delete(key);
-        } else {
-          await coll.doc(remoteId).set(payload, SetOptions(merge: true));
+            await _box.put(key, updated);
+          }
 
-          v['pending'] = false;
-          v['updatedAt'] = DateTime.now().toIso8601String();
+          // UPDATE
+          else {
+            await coll.doc(remoteId).set(payload, SetOptions(merge: true));
 
-          await _box.put(key, v);
+            final updated = Map<String, dynamic>.from(v);
+            updated['pending'] = false;
+            updated['updatedAt'] = DateTime.now().toIso8601String();
+            updated['__localKey'] = remoteId;
+
+            await _box.put(key, updated);
+          }
+        } catch (_) {
+          continue;
         }
       }
+    } finally {
+      _syncing = false;
     }
   }
 
@@ -242,7 +307,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
       }
 
       final now = DateTime.now().toUtc(); // force UTC
-      final localKey = 'local_${now.millisecondsSinceEpoch}';
+      final localKey = const Uuid().v4();
+
       final item = {
         'word': word,
         'translation': translationController.text.trim(),
@@ -254,6 +320,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
         'deleted': false,
         'createdAt': now.toIso8601String(),
         'updatedAt': now.toIso8601String(),
+        '__localKey': localKey, // ⭐ ДОБАВИЛИ
       };
 
       await _box.put(localKey, item);
@@ -307,12 +374,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
             ));
   }
 
-  void _showEditWordDialog(String docId, Map<String, dynamic> existingData) {
-    final wordController = TextEditingController(text: existingData['word']);
+  void _showEditWordDialog(String docId, VocabItem existing) {
+    final wordController = TextEditingController(text: existing.word);
     final translationController =
-        TextEditingController(text: existingData['translation']);
-    final contextController =
-        TextEditingController(text: existingData['context']);
+        TextEditingController(text: existing.translation);
+    final contextController = TextEditingController(text: existing.context);
 
     Future<void> updateWord() async {
       final word = wordController.text.trim();
@@ -512,7 +578,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
         updated['deleted'] = true;
         updated['pending'] = true;
         updated['updatedAt'] = DateTime.now().toIso8601String();
+
         await _box.put(docId, updated);
+        _syncPendingItems();
       }
 
       if (mounted) {
@@ -534,8 +602,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
     _firestoreSub?.cancel();
     _pendingSyncTimer?.cancel();
 
+    _searchController.dispose();
+
     if (_box.isOpen) {
-      _box.compact();
       _box.close();
     }
 
@@ -589,33 +658,22 @@ class _VocabularyTabState extends State<VocabularyTab> {
             ValueListenableBuilder(
               valueListenable: _box.listenable(),
               builder: (context, Box box, _) {
-                // Convert to list of maps (defensively convert dynamic keys -> String)
+                // Convert to list of VocabItem models (defensively convert dynamic keys -> String)
                 final all = box.values
-                    .map((e) => _toStringKeyedMap(e))
-                    .where((m) => m['deleted'] != true)
+                    .map((e) => VocabItem.fromMap(_toStringKeyedMap(e)))
+                    .where((item) => item.deleted != true)
                     .toList();
 
                 // Sort newest-first by createdAt (best-effort parse)
                 all.sort((a, b) {
-                  DateTime pa;
-                  DateTime pb;
-                  try {
-                    pa = parseCreatedAt(a['createdAt']);
-                  } catch (_) {
-                    pa = DateTime(2000);
-                  }
-                  try {
-                    pb = parseCreatedAt(b['createdAt']);
-                  } catch (_) {
-                    pb = DateTime(2000);
-                  }
+                  final pa = parseCreatedAt(a.createdAt);
+                  final pb = parseCreatedAt(b.createdAt);
                   return pb.compareTo(pa);
                 });
 
                 final filtered = all.where((item) {
-                  final word = _normalize((item['word'] ?? '').toString());
-                  final translation =
-                      _normalize((item['translation'] ?? '').toString());
+                  final word = _normalize(item.word);
+                  final translation = _normalize(item.translation);
                   final query = _normalize(_searchQuery);
 
                   return word.contains(query) || translation.contains(query);
@@ -635,11 +693,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 70),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
-                    final item = filtered[index];
+                    final VocabItem item = filtered[index];
 
                     final bgColor = Theme.of(context)
                             .extension<AppSemanticColors>()
-                            ?.fromStatus(item['status'] ?? 'learning') ??
+                            ?.fromStatus(item.status) ??
                         Colors.grey;
 
                     final textColor = Theme.of(context)
@@ -647,9 +705,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
                             ?.textForBackground(bgColor) ??
                         Colors.white;
                     final subTextColor = textColor.withOpacity(0.7);
-
-                    final displayWord = item['word'] ?? '';
-                    final displayTranslation = item['translation'] ?? '';
+                    final displayWord = item.word;
+                    final displayTranslation = item.translation;
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -705,9 +762,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                         color: subTextColor,
                                       ),
                                       onPressed: () => _showEditWordDialog(
-                                        item['__localKey'] ??
-                                            item['remoteId'] ??
-                                            '',
+                                        item.localKey ?? item.remoteId ?? '',
                                         item,
                                       ),
                                     ),
@@ -730,18 +785,15 @@ class _VocabularyTabState extends State<VocabularyTab> {
                                                   ?.danger ??
                                               Colors.redAccent),
                                       onPressed: () => _deleteWord(
-                                          item['__localKey'] ??
-                                              item['remoteId'] ??
-                                              ''),
+                                          item.localKey ?? item.remoteId ?? ''),
                                     ),
                                   ),
                                 ],
                               ),
-                              if ((item['context'] ?? '').isNotEmpty)
-                                SizedBox(height: 6),
-                              if ((item['context'] ?? '').isNotEmpty)
+                              if (item.context.isNotEmpty) SizedBox(height: 6),
+                              if (item.context.isNotEmpty)
                                 Text(
-                                  item['context'] ?? '',
+                                  item.context,
                                   style: TextStyle(color: subTextColor),
                                 ),
                             ],
