@@ -93,7 +93,7 @@ String _cleanTranslation(String raw) {
     r'vtr|vi|adj|adv|prép|expr|ind|loc|'
     r'countable noun|uncountable noun|'
     r'impers|prep|pron|v|insep|phrasal|v pron|interj|'
-    r'nm|nf|npl|n|'
+    r'nm|nf|npl|n|nmpl|nfpl|past p|'
     r'v expr|v aux|v past p|'
     r'vtr \+ prep|vtr \+ refl'
     r')\b',
