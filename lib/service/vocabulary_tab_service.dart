@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'language_service.dart';
 
 class VocabularyTabController {
   bool _syncing = false;
@@ -85,7 +86,7 @@ class VocabularyTabController {
     final user = _auth.currentUser;
     if (user == null) return false;
 
-    _boxName ??= 'vocab_${user.uid}';
+    _boxName ??= 'vocab_${user.uid}_${LanguageService.instance.currentLang}';
 
     if (_box != null && _box!.isOpen) {
       _hiveReady = true;
@@ -111,6 +112,36 @@ class VocabularyTabController {
 
     final ok = await _ensureBoxReady();
     if (!ok) return;
+
+    startFirestoreListenerForCurrentUser();
+    startSyncTimer();
+    // Listen for language changes and switch boxes
+    LanguageService.instance.addListener(_onLanguageChanged);
+  }
+
+  Future<void> _onLanguageChanged() async {
+    if (_disposed) return;
+
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    // cancel listeners and timers
+    _firestoreSub?.cancel();
+    _firestoreSub = null;
+    _pendingSyncTimer?.cancel();
+    _pendingSyncTimer = null;
+
+    final newName = 'vocab_${user.uid}_${LanguageService.instance.currentLang}';
+
+    try {
+      if (_box != null && _box!.isOpen) await _box!.close();
+    } catch (_) {}
+
+    _box = Hive.isBoxOpen(newName)
+        ? Hive.box(newName)
+        : await Hive.openBox(newName);
+    _boxName = newName;
+    _hiveReady = _box != null && _box!.isOpen;
 
     startFirestoreListenerForCurrentUser();
     startSyncTimer();
@@ -438,6 +469,7 @@ class VocabularyTabController {
       'word': word,
       'translation': translation,
       'context': context,
+      'language': LanguageService.instance.currentLang,
       'status': 'learning',
       'step': 0,
       'nextReview': now.toIso8601String(),

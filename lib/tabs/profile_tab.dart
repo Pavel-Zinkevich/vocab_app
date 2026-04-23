@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import '../pages/calendar_page.dart';
 
-import 'package:crop_image/crop_image.dart';
+import '../service/language_service.dart';
 
 import '../utils/cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -93,11 +93,18 @@ class _ProfileTabState extends State<ProfileTab>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    // reactively rebuild when the selected language changes
+    LanguageService.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    LanguageService.instance.removeListener(_onLangChanged);
     super.dispose();
   }
 
@@ -112,24 +119,26 @@ class _ProfileTabState extends State<ProfileTab>
         .collection('vocabulary')
         .snapshots()
         .map((snapshot) {
-      // Return full-ish word objects so downstream UI (diagram, lists)
-      // can show word text and translation when needed.
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
+      // Return full-ish word objects filtered by currently selected language
+      // so downstream UI (diagram, lists) can show language-specific stats.
+      final currentLang = LanguageService.instance.currentLang;
 
-        return {
-          // numeric study step
-          'step': data['step'] ?? 0,
-          // timestamps (may be a Firestore Timestamp)
-          'createdAt': data['createdAt'],
-          // user-facing fields used by ProgressPage and lists
-          'word': data['word'] ?? '',
-          'translation': data['translation'] ?? '',
-          // include status (e.g. 'learning'/'known'/'learned') if present
-          'status': data['status'] ?? data['category'] ?? '',
-          'category': data['category'] ?? '',
-        };
-      }).toList();
+      return snapshot.docs
+          .map((doc) {
+            final data = doc.data();
+
+            return {
+              'step': data['step'] ?? 0,
+              'createdAt': data['createdAt'],
+              'word': data['word'] ?? '',
+              'translation': data['translation'] ?? '',
+              'status': data['status'] ?? data['category'] ?? '',
+              'category': data['category'] ?? '',
+              'language': data['language'],
+            };
+          })
+          .where((m) => m['language'] == null || m['language'] == currentLang)
+          .toList();
     });
   }
 
@@ -160,7 +169,19 @@ class _ProfileTabState extends State<ProfileTab>
       backgroundColor: bg,
       appBar: AppBar(
         backgroundColor: tabBg,
-        title: Text('Profile', style: TextStyle(color: textColor)),
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Profile', style: TextStyle(color: textColor)),
+            const SizedBox(width: 8),
+            Text(
+              LanguageService.instance.currentLang == 'fr' ? '🇫🇷' : '🇪🇸',
+              style: const TextStyle(fontSize: 18),
+            ),
+          ],
+        ),
         iconTheme: IconThemeData(color: textColor),
         bottom: TabBar(
           controller: _tabController,

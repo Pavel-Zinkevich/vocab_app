@@ -330,34 +330,9 @@ class _LoginPageState extends State<LoginPage> {
                               .toLowerCase()
                               .contains(textEditingValue.text.toLowerCase()));
                         },
-
                         onSelected: (String selection) {
                           _emailController.text = selection;
                         },
-
-                        // 👇 THIS is where you add it
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4,
-                              child: SizedBox(
-                                width: 300,
-                                child: ListView(
-                                  padding: EdgeInsets.zero,
-                                  shrinkWrap: true,
-                                  children: options.map((e) {
-                                    return ListTile(
-                                      title: Text(e),
-                                      onTap: () => onSelected(e),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-
                         fieldViewBuilder:
                             (context, controller, focusNode, onFieldSubmitted) {
                           return TextFormField(

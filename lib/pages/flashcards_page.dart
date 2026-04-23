@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
+import '../service/language_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class FlashcardsPage extends StatefulWidget {
@@ -44,12 +45,21 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     _player.setSource(AssetSource('sounds/knew.wav'));
     _player.setSource(AssetSource('sounds/didnt_know.mp3'));
     load();
+    // react to global language changes
+    LanguageService.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() {
+    // reload words for the newly selected language
+    load();
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     c.dispose();
     _player.dispose();
+    LanguageService.instance.removeListener(_onLangChanged);
     super.dispose();
   }
 
@@ -63,16 +73,24 @@ class _FlashcardsPageState extends State<FlashcardsPage>
     final u = auth.currentUser;
     if (u == null) return;
 
+    final currentLang = LanguageService.instance.currentLang;
+
     final s =
         await db.collection('users').doc(u.uid).collection('vocabulary').get();
 
     words = s.docs
-        .map((d) => {
-              'id': d.id,
-              ...d.data(),
-              'step': d['step'] ?? 0,
-              'status': d['status'] ?? 'learning',
-            })
+        .map((d) {
+          final data = d.data();
+          return {
+            'id': d.id,
+            ...data,
+            'step': data['step'] ?? 0,
+            'status': data['status'] ?? 'learning',
+            'language': data['language'],
+          };
+        })
+        // include items that either have no language (legacy) or match the current language
+        .where((w) => w['language'] == null || w['language'] == currentLang)
         .toList();
 
     setState(() {

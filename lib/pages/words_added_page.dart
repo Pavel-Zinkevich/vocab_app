@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
+import '../service/language_service.dart';
 import '../theme/sparkle_decorator.dart';
 
 class WordsAddedPage extends StatefulWidget {
@@ -62,15 +63,22 @@ class _WordsAddedPageState extends State<WordsAddedPage> {
           .orderBy('createdAt', descending: true)
           .get();
 
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'word': data['word'] ?? '',
-          'translation': data['translation'] ?? '',
-          'context': data['context'] ?? '',
-          'status': data['status'] ?? 'uncategorized',
-        };
-      }).toList();
+      final currentLang = LanguageService.instance.currentLang;
+
+      return snapshot.docs
+          .map((doc) {
+            final data = doc.data();
+            return {
+              'word': data['word'] ?? '',
+              'translation': data['translation'] ?? '',
+              'context': data['context'] ?? '',
+              'status': data['status'] ?? 'uncategorized',
+              'language': data['language'],
+            };
+          })
+          // only include words that match the currently selected language
+          .where((m) => m['language'] != null && m['language'] == currentLang)
+          .toList();
     } catch (_) {
       return [];
     }

@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
+import '../service/language_service.dart';
 
 /// --- Main Definition Page Widget ---
 class DefinitionPage extends StatefulWidget {
@@ -44,30 +45,31 @@ class _AudioDropdownValue {
 
 /// --- Word Sense Model ---
 class _Sense {
-  final String french;
-  final String translation;
-  final List<String> frExamples;
-  final List<String> enExamples;
+  // source/target are generic names (source may be French or Spanish depending on mode)
+  final String source;
+  final String target;
+  final List<String> sourceExamples;
+  final List<String> targetExamples;
 
   _Sense({
-    required this.french,
-    required this.translation,
-    List<String>? frExamples,
-    List<String>? enExamples,
-  })  : frExamples = frExamples ?? [],
-        enExamples = enExamples ?? [];
+    required this.source,
+    required this.target,
+    List<String>? sourceExamples,
+    List<String>? targetExamples,
+  })  : sourceExamples = sourceExamples ?? [],
+        targetExamples = targetExamples ?? [];
 
   _Sense copyWith({
-    String? french,
-    String? translation,
-    List<String>? frExamples,
-    List<String>? enExamples,
+    String? source,
+    String? target,
+    List<String>? sourceExamples,
+    List<String>? targetExamples,
   }) {
     return _Sense(
-      french: french ?? this.french,
-      translation: translation ?? this.translation,
-      frExamples: frExamples ?? List.from(this.frExamples),
-      enExamples: enExamples ?? List.from(this.enExamples),
+      source: source ?? this.source,
+      target: target ?? this.target,
+      sourceExamples: sourceExamples ?? List.from(this.sourceExamples),
+      targetExamples: targetExamples ?? List.from(this.targetExamples),
     );
   }
 }
@@ -93,7 +95,7 @@ String _cleanTranslation(String raw) {
     r'vtr|vi|adj|adv|prép|expr|ind|loc|'
     r'countable noun|uncountable noun|'
     r'impers|prep|pron|v|insep|phrasal|v pron|interj|'
-    r'nm|nf|npl|n|nmpl|nfpl|past p|'
+    r'nm|nf|npl|n|'
     r'v expr|v aux|v past p|'
     r'vtr \+ prep|vtr \+ refl'
     r')\b',
@@ -146,9 +148,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
           .doc(user.uid)
           .collection('vocabulary')
           .add({
-        'word': _cleanTranslation(sense.french),
-        'translation': _cleanTranslation(sense.translation),
-        'context': sense.frExamples.isNotEmpty ? sense.frExamples.first : '',
+        'word': _cleanTranslation(sense.source),
+        'translation': _cleanTranslation(sense.target),
+        'context':
+            sense.sourceExamples.isNotEmpty ? sense.sourceExamples.first : '',
+        'language': LanguageService.instance.currentLang,
 
         // ✅ SRS fields (CRITICAL)
         'status': 'learning',
@@ -162,7 +166,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Word "${sense.french}" added to vocabulary'),
+            content: Text('Word "${sense.source}" added to vocabulary'),
             duration: Duration(seconds: 1)),
       );
     } catch (e) {
@@ -232,9 +236,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
     });
 
     final wordEsc = Uri.encodeComponent(widget.word.trim());
+    final langCode =
+        LanguageService.instance.currentLang == 'fr' ? 'fren' : 'esen';
     final url = widget.wordUrl != null
         ? Uri.parse(widget.wordUrl!)
-        : Uri.parse('https://www.wordreference.com/fren/$wordEsc');
+        : Uri.parse('https://www.wordreference.com/$langCode/$wordEsc');
 
     try {
       final resp = await http.get(url).timeout(const Duration(seconds: 12));
@@ -348,15 +354,17 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
   /// --- UI badge helpers ---
   String get _badgeLabel {
-    final url = widget.wordUrl ?? '';
-    if (url.contains('/enfr/')) return 'English → French';
-    if (url.contains('/fren/')) return 'French → English';
+    final cur = LanguageService.instance.currentLang;
+    if (cur == 'fr') return 'French → English';
+    if (cur == 'es') return 'Spanish → English';
     return 'Link to the site';
   }
 
   String get _badgeUrl {
+    final langCode =
+        LanguageService.instance.currentLang == 'fr' ? 'fren' : 'esen';
     return widget.wordUrl ??
-        'https://www.wordreference.com/enfr/${widget.word}';
+        'https://www.wordreference.com/$langCode/${widget.word}';
   }
 
   /// --- Parse table rows for senses and examples ---
@@ -378,14 +386,14 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
       if (frTd != null && toTd != null) {
         // --- NORMAL CASE (new sense) ---
-        final french = frTd.text.trim();
-        final translation = toTd.text.trim();
+        final sourceWord = frTd.text.trim();
+        final targetWord = toTd.text.trim();
 
-        if (french.isEmpty || translation.isEmpty) continue;
+        if (sourceWord.isEmpty || targetWord.isEmpty) continue;
 
         final sense = _Sense(
-          french: unescape.convert(french),
-          translation: _cleanTranslation(unescape.convert(translation)),
+          source: unescape.convert(sourceWord),
+          target: _cleanTranslation(unescape.convert(targetWord)),
         );
 
         _attachExamples(sense, frExTd, toExTd, unescape);
@@ -398,9 +406,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
         if (extraTranslation.isNotEmpty) {
           final lastIndex = _senses.length - 1;
           final last = _senses.last;
-
           _senses[lastIndex] = last.copyWith(
-            translation: "${last.translation} / $extraTranslation",
+            target: "${last.target} / $extraTranslation",
           );
         }
 
@@ -412,10 +419,10 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
     // Deduplicate examples
     for (final s in _senses) {
-      s.frExamples
-          .replaceRange(0, s.frExamples.length, s.frExamples.toSet().toList());
-      s.enExamples
-          .replaceRange(0, s.enExamples.length, s.enExamples.toSet().toList());
+      s.sourceExamples.replaceRange(
+          0, s.sourceExamples.length, s.sourceExamples.toSet().toList());
+      s.targetExamples.replaceRange(
+          0, s.targetExamples.length, s.targetExamples.toSet().toList());
     }
   }
 
@@ -423,11 +430,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
       HtmlUnescape unescape) {
     if (frExTd != null) {
       final fe = frExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (fe.isNotEmpty) sense.frExamples.add(unescape.convert(fe));
+      if (fe.isNotEmpty) sense.sourceExamples.add(unescape.convert(fe));
     }
     if (toExTd != null) {
       final te = toExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (te.isNotEmpty) sense.enExamples.add(unescape.convert(te));
+      if (te.isNotEmpty) sense.targetExamples.add(unescape.convert(te));
     }
   }
 
@@ -721,7 +728,7 @@ class _SenseTile extends StatelessWidget {
                     text: '${index + 1}. ',
                     style: base?.copyWith(fontWeight: FontWeight.w600)),
                 TextSpan(
-                  text: _cleanTranslation(sense.french),
+                  text: _cleanTranslation(sense.source),
                   style: base?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 TextSpan(
@@ -729,14 +736,14 @@ class _SenseTile extends StatelessWidget {
                   style: base?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 TextSpan(
-                  text: ' ${sense.translation}',
+                  text: ' ${sense.target}',
                   style: base?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
           ),
-          ..._buildExamples(sense.frExamples, context),
-          ..._buildExamples(sense.enExamples, context, italic: true),
+          ..._buildExamples(sense.sourceExamples, context),
+          ..._buildExamples(sense.targetExamples, context, italic: true),
         ],
       ),
     );
