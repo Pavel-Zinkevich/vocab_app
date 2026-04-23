@@ -11,6 +11,7 @@ class ProgressPainter extends CustomPainter {
   final Color learningColor;
   final Color knownColor;
   final Color learnedColor;
+  final Color trackColor;
 
   ProgressPainter({
     required this.learning,
@@ -20,6 +21,7 @@ class ProgressPainter extends CustomPainter {
     required this.learningColor,
     required this.knownColor,
     required this.learnedColor,
+    required this.trackColor,
   });
 
   @override
@@ -34,7 +36,7 @@ class ProgressPainter extends CustomPainter {
     double startAngle = -pi / 2;
 
     final bgPaint = Paint()
-      ..color = Colors.grey.shade200
+      ..color = trackColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
 
@@ -53,7 +55,6 @@ class ProgressPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
 
       canvas.drawArc(rect, startAngle, adjusted, false, paint);
-
       startAngle += sweep;
     }
 
@@ -63,17 +64,27 @@ class ProgressPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant ProgressPainter oldDelegate) {
+    return oldDelegate.learning != learning ||
+        oldDelegate.known != known ||
+        oldDelegate.learned != learned ||
+        oldDelegate.total != total ||
+        oldDelegate.learningColor != learningColor ||
+        oldDelegate.knownColor != knownColor ||
+        oldDelegate.learnedColor != learnedColor ||
+        oldDelegate.trackColor != trackColor;
+  }
 }
-
-// ======================================================
 
 class ProgressPage extends StatelessWidget {
   final List<Map<String, dynamic>> words;
 
   const ProgressPage({super.key, required this.words});
 
-  // ---------------- SAFE STEP ----------------
+  AppSemanticColors? _semantic(BuildContext context) {
+    return Theme.of(context).extension<AppSemanticColors>();
+  }
+
   int _safeStep(dynamic step) {
     if (step is int) return step;
     if (step is String) return int.tryParse(step) ?? 0;
@@ -81,7 +92,6 @@ class ProgressPage extends StatelessWidget {
     return 0;
   }
 
-  // ---------------- STATS ----------------
   Map<String, int> _calculateStats() {
     int learning = 0;
     int known = 0;
@@ -106,7 +116,6 @@ class ProgressPage extends StatelessWidget {
     };
   }
 
-  // ---------------- FILTER ----------------
   List<Map<String, dynamic>> _filterByStatus(String status) {
     return words.where((w) {
       final step = _safeStep(w['step']);
@@ -117,82 +126,116 @@ class ProgressPage extends StatelessWidget {
     }).toList();
   }
 
+  Color _learningColor(BuildContext context) {
+    final semantic = _semantic(context);
+    return semantic?.learning ?? Theme.of(context).colorScheme.primary;
+  }
+
+  Color _knownColor(BuildContext context) {
+    final semantic = _semantic(context);
+    return semantic?.known ?? Theme.of(context).colorScheme.tertiary;
+  }
+
+  Color _learnedColor(BuildContext context) {
+    final semantic = _semantic(context);
+    return semantic?.learned ?? Colors.green;
+  }
+
+  Color _trackColor(BuildContext context) {
+    final semantic = _semantic(context);
+    if (semantic != null) {
+      return semantic.background.withOpacity(0.35);
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    return scheme.surfaceVariant.withOpacity(0.8);
+  }
+
+  Color _secondaryTextColor(BuildContext context) {
+    final semantic = _semantic(context);
+    if (semantic != null) {
+      return semantic.textSecondary;
+    }
+    return Theme.of(context).colorScheme.onSurface.withOpacity(0.65);
+  }
+
   @override
   Widget build(BuildContext context) {
     final stats = _calculateStats();
-    // show real total (0 when there are no words) — avoid artificially inflating to 1
-    final total = words.length;
+    final realTotal = words.length;
+    final painterTotal = realTotal == 0 ? 1 : realTotal;
 
-    final colors = Theme.of(context).extension<AppSemanticColors>()!;
-    final learningColor = colors.learning;
-    final knownColor = colors.known;
-    final learnedColor = colors.learned;
+    final learningColor = _learningColor(context);
+    final knownColor = _knownColor(context);
+    final learnedColor = _learnedColor(context);
+    final trackColor = _trackColor(context);
 
     final items = [
-      ("Learning", stats['learning']!, learningColor, 'learning'),
-      ("Known", stats['known']!, knownColor, 'known'),
-      ("Learned", stats['learned']!, learnedColor, 'learned'),
+      ("Learning", stats['learning'] ?? 0, learningColor, 'learning'),
+      ("Known", stats['known'] ?? 0, knownColor, 'known'),
+      ("Learned", stats['learned'] ?? 0, learnedColor, 'learned'),
     ];
 
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // ---------------- CHART ----------------
           Stack(
             alignment: Alignment.center,
             children: [
               CustomPaint(
                 size: const Size(260, 260),
                 painter: ProgressPainter(
-                  learning: stats['learning']!,
-                  known: stats['known']!,
-                  learned: stats['learned']!,
-                  total: total,
+                  learning: stats['learning'] ?? 0,
+                  known: stats['known'] ?? 0,
+                  learned: stats['learned'] ?? 0,
+                  total: painterTotal,
                   learningColor: learningColor,
                   knownColor: knownColor,
                   learnedColor: learnedColor,
+                  trackColor: trackColor,
                 ),
               ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    "$total",
-                    style: const TextStyle(
+                    "$realTotal",
+                    style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     "Total Words",
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(
+                      color: _secondaryTextColor(context),
+                    ),
                   ),
                 ],
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
-          // ---------------- STATS LIST (NO DUPLICATION) ----------------
-          ...items.map((e) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _statRow(
-                  context,
-                  e.$1,
-                  e.$2,
-                  e.$3,
-                  _filterByStatus(e.$4),
-                ),
-              )),
+          ...items.map(
+            (e) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _statRow(
+                context,
+                e.$1,
+                e.$2,
+                e.$3,
+                _filterByStatus(e.$4),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // ---------------- STAT ROW ----------------
   Widget _statRow(
     BuildContext context,
     String title,
@@ -200,6 +243,8 @@ class ProgressPage extends StatelessWidget {
     Color color,
     List<Map<String, dynamic>> filteredWords,
   ) {
+    final textColor = Theme.of(context).colorScheme.onSurface;
+
     return InkWell(
       onTap: () => Navigator.push(
         context,
@@ -230,10 +275,18 @@ class ProgressPage extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Expanded(child: Text(title)),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(color: textColor),
+              ),
+            ),
             Text(
               "$value",
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
           ],
         ),

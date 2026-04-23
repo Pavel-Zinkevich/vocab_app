@@ -13,7 +13,6 @@ import '../pages/history_page.dart';
 import '../utils/diagram.dart';
 
 import '../theme/theme_controller.dart' as tc;
-// using Theme.of(context) for colors instead of AppColors to support dynamic themes
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -28,6 +27,7 @@ class _ProfileTabState extends State<ProfileTab>
 
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
+
   Stream<DocumentSnapshot<Map<String, dynamic>>> _userStream() {
     final user = _auth.currentUser;
     if (user == null) return const Stream.empty();
@@ -93,7 +93,6 @@ class _ProfileTabState extends State<ProfileTab>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    // reactively rebuild when the selected language changes
     LanguageService.instance.addListener(_onLangChanged);
   }
 
@@ -110,7 +109,6 @@ class _ProfileTabState extends State<ProfileTab>
 
   Stream<List<Map<String, dynamic>>> _vocabularyStream() {
     final user = _auth.currentUser;
-
     if (user == null) return const Stream.empty();
 
     return _firestore
@@ -119,14 +117,11 @@ class _ProfileTabState extends State<ProfileTab>
         .collection('vocabulary')
         .snapshots()
         .map((snapshot) {
-      // Return full-ish word objects filtered by currently selected language
-      // so downstream UI (diagram, lists) can show language-specific stats.
       final currentLang = LanguageService.instance.currentLang;
 
       return snapshot.docs
           .map((doc) {
             final data = doc.data();
-
             return {
               'step': data['step'] ?? 0,
               'createdAt': data['createdAt'],
@@ -204,7 +199,6 @@ class _ProfileTabState extends State<ProfileTab>
         controller: _tabController,
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          /// ================= INFO TAB =================
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: _userStream(),
             builder: (context, userSnap) {
@@ -227,7 +221,11 @@ class _ProfileTabState extends State<ProfileTab>
                 stream: _vocabularyStream(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                    return Center(
+                      child: CircularProgressIndicator(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    );
                   }
 
                   final words = snapshot.data!;
@@ -246,7 +244,6 @@ class _ProfileTabState extends State<ProfileTab>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          /// PROFILE HEADER
                           Center(
                             child: Column(
                               children: [
@@ -271,18 +268,10 @@ class _ProfileTabState extends State<ProfileTab>
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 5),
-                                // const Text(
-                                //   "Tap avatar to change photo • Tap name to edit",
-                                //   style: TextStyle(
-                                //       fontSize: 12, color: Colors.grey),
-                                // ),
                               ],
                             ),
                           ),
-
                           const SizedBox(height: 20),
-
                           Text(
                             'Your Learning Activity',
                             style: TextStyle(
@@ -291,9 +280,7 @@ class _ProfileTabState extends State<ProfileTab>
                               color: pageTextColor,
                             ),
                           ),
-
                           const SizedBox(height: 16),
-
                           GestureDetector(
                             onTap: () => Navigator.push(
                               context,
@@ -309,12 +296,9 @@ class _ProfileTabState extends State<ProfileTab>
                               context,
                             ),
                           ),
-
                           const SizedBox(height: 12),
                           buildLegend(maxCount, context),
-
                           const SizedBox(height: 24),
-
                           Text(
                             "Vocabulary Progress",
                             style: TextStyle(
@@ -323,14 +307,9 @@ class _ProfileTabState extends State<ProfileTab>
                               color: pageTextColor,
                             ),
                           ),
-
                           const SizedBox(height: 12),
-
-                          // ⚠️ Make sure this widget exists
                           ProgressPage(words: words),
-
                           const SizedBox(height: 30),
-
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
@@ -377,8 +356,6 @@ class _ProfileTabState extends State<ProfileTab>
               );
             },
           ),
-
-          /// ================= HISTORY TAB =================
           const HistoryPage(),
         ],
       ),

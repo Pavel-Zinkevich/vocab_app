@@ -1,25 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'theme/theme_controller.dart';
+import 'firebase_options.dart';
+
 import 'tabs/vocabulary_tab.dart';
 import 'tabs/training_tab.dart';
 import 'tabs/profile_tab.dart';
+
 import 'pages/login_page.dart';
+import 'pages/register_page.dart';
+import 'pages/email_verification_page.dart';
+
+import 'theme/theme_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   await Hive.initFlutter();
 
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -27,12 +36,18 @@ class MyApp extends StatelessWidget {
       valueListenable: ThemeController.themeMode,
       builder: (context, mode, _) {
         return MaterialApp(
-          title: 'Vocab App',
           debugShowCheckedModeBanner: false,
+          title: 'Vocab App',
+          themeMode: mode,
           theme: ThemeController.lightTheme,
           darkTheme: ThemeController.darkTheme,
-          themeMode: mode,
           home: const AuthGate(),
+          routes: {
+            '/login': (_) => LoginPage(),
+            '/register': (_) => RegisterPage(),
+            '/verify-email': (_) => EmailVerificationPage(),
+            '/home': (_) => const HomeTabsPage(),
+          },
         );
       },
     );
@@ -40,59 +55,130 @@ class MyApp extends StatelessWidget {
 }
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({Key? key}) : super(key: key);
+  const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-              body: Center(child: CircularProgressIndicator()));
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            body: Center(
+              child: CircularProgressIndicator(
+                color: colorScheme.primary,
+              ),
+            ),
+          );
         }
 
-        if (!snap.hasData || snap.data == null) {
+        final user = snapshot.data;
+
+        if (user == null) {
           return LoginPage();
         }
 
-        return const HomeScaffold();
+        if (!user.emailVerified) {
+          return EmailVerificationPage();
+        }
+
+        return const HomeTabsPage();
       },
     );
   }
 }
 
-class HomeScaffold extends StatefulWidget {
-  const HomeScaffold({Key? key}) : super(key: key);
+class HomeTabsPage extends StatefulWidget {
+  const HomeTabsPage({super.key});
 
   @override
-  State<HomeScaffold> createState() => _HomeScaffoldState();
+  State<HomeTabsPage> createState() => _HomeTabsPageState();
 }
 
-class _HomeScaffoldState extends State<HomeScaffold> {
-  int _index = 0;
+class _HomeTabsPageState extends State<HomeTabsPage> {
+  int _selectedIndex = 0;
+  late final PageController _pageController;
 
-  static final List<Widget> _pages = <Widget>[
+  late final List<Widget> _pages = [
     const VocabularyTab(),
     TrainingTab(),
-    // ProfileTab is defined as a separate file under tabs/profile_tab.dart
-    // The project also includes older ProfileTab variants; import here uses the tab.
-    // If a different ProfilePage is desired, replace this with the appropriate widget.
-    // ignore: prefer_const_constructors
-    ProfileTab(),
+    const ProfileTab(),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _selectedIndex);
+  }
+
+  void _onNavTapped(int index) {
+    if (_selectedIndex == index) return;
+
+    setState(() {
+      _selectedIndex = index;
+    });
+
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _onPageChanged(int index) {
+    if (_selectedIndex == index) return;
+
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final navTheme = Theme.of(context).bottomNavigationBarTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final navBg = navTheme.backgroundColor ?? colorScheme.surface;
+    final selectedColor = navTheme.selectedItemColor ?? colorScheme.primary;
+    final unselectedColor =
+        navTheme.unselectedItemColor ?? colorScheme.onSurface.withOpacity(0.6);
+
     return Scaffold(
-      body: _pages[_index],
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: _onPageChanged,
+        children: _pages,
+      ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        onTap: (i) => setState(() => _index = i),
+        currentIndex: _selectedIndex,
+        onTap: _onNavTapped,
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: navBg,
+        selectedItemColor: selectedColor,
+        unselectedItemColor: unselectedColor,
+        showUnselectedLabels: true,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Vocab'),
-          BottomNavigationBarItem(icon: Icon(Icons.style), label: 'Training'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book),
+            label: 'Vocabulary',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.school),
+            label: 'Training',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
     );
