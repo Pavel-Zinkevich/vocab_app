@@ -120,7 +120,8 @@ class ProgressPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stats = _calculateStats();
-    final total = words.isEmpty ? 1 : words.length;
+    // show real total (0 when there are no words) — avoid artificially inflating to 1
+    final total = words.length;
 
     final colors = Theme.of(context).extension<AppSemanticColors>()!;
     final learningColor = colors.learning;

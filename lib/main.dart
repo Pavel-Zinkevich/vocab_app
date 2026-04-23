@@ -1,53 +1,38 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-
+import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'pages/email_verification_page.dart';
-import 'pages/login_page.dart';
-import 'pages/register_page.dart';
-import 'tabs/profile_tab.dart';
-import 'tabs/training_tab.dart';
-import 'tabs/vocabulary_tab.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'theme/theme_controller.dart';
+import 'tabs/vocabulary_tab.dart';
+import 'tabs/training_tab.dart';
+import 'tabs/profile_tab.dart';
+import 'pages/login_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await Hive.initFlutter();
 
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeController.themeMode,
-      builder: (context, themeMode, _) {
+      builder: (context, mode, _) {
         return MaterialApp(
-          debugShowCheckedModeBanner: false,
           title: 'Vocab App',
+          debugShowCheckedModeBanner: false,
           theme: ThemeController.lightTheme,
           darkTheme: ThemeController.darkTheme,
-          themeMode: themeMode,
+          themeMode: mode,
           home: const AuthGate(),
-          routes: {
-            '/login': (_) => LoginPage(),
-            '/register': (_) => RegisterPage(),
-            '/verify-email': (_) => EmailVerificationPage(),
-            '/home': (_) => const MainTabScaffold(),
-          },
-          onUnknownRoute: (_) => MaterialPageRoute(
-            builder: (_) => const AuthGate(),
-          ),
         );
       },
     );
@@ -55,83 +40,59 @@ class MyApp extends StatelessWidget {
 }
 
 class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+  const AuthGate({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+              body: Center(child: CircularProgressIndicator()));
         }
 
-        final user = snapshot.data;
-
-        if (user == null) {
+        if (!snap.hasData || snap.data == null) {
           return LoginPage();
         }
 
-        if (!user.emailVerified) {
-          return EmailVerificationPage();
-        }
-
-        return const MainTabScaffold();
+        return const HomeScaffold();
       },
     );
   }
 }
 
-class MainTabScaffold extends StatefulWidget {
-  const MainTabScaffold({super.key});
+class HomeScaffold extends StatefulWidget {
+  const HomeScaffold({Key? key}) : super(key: key);
 
   @override
-  State<MainTabScaffold> createState() => _MainTabScaffoldState();
+  State<HomeScaffold> createState() => _HomeScaffoldState();
 }
 
-class _MainTabScaffoldState extends State<MainTabScaffold> {
-  int _selectedIndex = 0;
+class _HomeScaffoldState extends State<HomeScaffold> {
+  int _index = 0;
 
-  late final List<Widget> _pages = [
+  static final List<Widget> _pages = <Widget>[
     const VocabularyTab(),
     TrainingTab(),
+    // ProfileTab is defined as a separate file under tabs/profile_tab.dart
+    // The project also includes older ProfileTab variants; import here uses the tab.
+    // If a different ProfilePage is desired, replace this with the appropriate widget.
+    // ignore: prefer_const_constructors
     ProfileTab(),
   ];
-
-  void _onItemTapped(int index) {
-    if (!mounted) return;
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: _onItemTapped,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.book),
-            label: 'Vocabulary',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.fitness_center),
-            label: 'Training',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
+      body: _pages[_index],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Vocab'),
+          BottomNavigationBarItem(icon: Icon(Icons.style), label: 'Training'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );

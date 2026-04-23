@@ -92,7 +92,7 @@ String _cleanTranslation(String raw) {
   // Remove grammar tags
   final grammarPattern = RegExp(
     r'\b('
-    r'vtr|vi|adj|adv|prép|expr|ind|loc|'
+    r'vtr|vi|adj|adv|prép|expr|loc|'
     r'countable noun|uncountable noun|'
     r'impers|prep|pron|v|insep|phrasal|v pron|interj|'
     r'nm|nf|npl|n|'
@@ -440,7 +440,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
         if (extraTranslation.isNotEmpty) {
           // Pick a whole extra translation segment to append (no mid-word truncation).
-          final chosen = _chooseExtraSegment(extraTranslation, maxLen: 25);
+          final chosen = _chooseExtraSegment(extraTranslation, maxLen: 20);
           if (chosen != null && chosen.isNotEmpty) {
             final lastIndex = _senses.length - 1;
             final last = _senses.last;
