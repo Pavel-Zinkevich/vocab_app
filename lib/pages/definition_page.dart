@@ -261,12 +261,44 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
   /// --- Detect if listen label should be EN/FR ---
   void _detectListenLabel(dom.Document document) {
+    // If app language is Spanish, prefer the Spanish label.
+    if (LanguageService.instance.currentLang == 'es') {
+      _listenLabel = 'ESCUCHAR:';
+      return;
+    }
+
     final listenSpan = document.querySelector('#listen_txt')?.text.trim() ?? '';
     if (listenSpan.toLowerCase().startsWith('listen')) {
       _listenLabel = 'LISTEN:';
     } else {
-      _listenLabel = 'ÉCOUTER:'; // default fallback
+      _listenLabel = 'ÉCOUTER:'; // default fallback (French)
     }
+  }
+
+  /// Choose an extra translation segment that fits within [maxLen] characters.
+  /// Prefer whole segments split by comma, then by slash. Return null if none fit.
+  String? _chooseExtraSegment(String raw, {int maxLen = 50}) {
+    final candidate = raw.trim();
+    if (candidate.length <= maxLen) return candidate;
+
+    // Try comma-separated pieces
+    if (candidate.contains(',')) {
+      for (final part in candidate.split(',')) {
+        final p = part.trim();
+        if (p.isNotEmpty && p.length <= maxLen) return p;
+      }
+    }
+
+    // Try slash-separated pieces
+    if (candidate.contains('/')) {
+      for (final part in candidate.split('/')) {
+        final p = part.trim();
+        if (p.isNotEmpty && p.length <= maxLen) return p;
+      }
+    }
+
+    // No whole piece fits within the limit; don't include partials.
+    return null;
   }
 
   /// --- Parse HTML and extract definitions, examples, IPA, and audio ---
@@ -353,10 +385,13 @@ class _DefinitionPageState extends State<DefinitionPage> {
   }
 
   /// --- UI badge helpers ---
+  // String get _badgeLabel {
+  //   final cur = LanguageService.instance.currentLang;
+  //   if (cur == 'fr') return 'French → English';
+  //   if (cur == 'es') return 'Spanish → English';
+  //   return 'Link to the site';
+  // }
   String get _badgeLabel {
-    final cur = LanguageService.instance.currentLang;
-    if (cur == 'fr') return 'French → English';
-    if (cur == 'es') return 'Spanish → English';
     return 'Link to the site';
   }
 
@@ -404,11 +439,15 @@ class _DefinitionPageState extends State<DefinitionPage> {
             _cleanTranslation(unescape.convert(toTd.text.trim()));
 
         if (extraTranslation.isNotEmpty) {
-          final lastIndex = _senses.length - 1;
-          final last = _senses.last;
-          _senses[lastIndex] = last.copyWith(
-            target: "${last.target} / $extraTranslation",
-          );
+          // Pick a whole extra translation segment to append (no mid-word truncation).
+          final chosen = _chooseExtraSegment(extraTranslation, maxLen: 25);
+          if (chosen != null && chosen.isNotEmpty) {
+            final lastIndex = _senses.length - 1;
+            final last = _senses.last;
+            _senses[lastIndex] = last.copyWith(
+              target: "${last.target} / $chosen",
+            );
+          }
         }
 
         _attachExamples(_senses.last, frExTd, toExTd, unescape);
