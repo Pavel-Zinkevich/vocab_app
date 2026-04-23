@@ -1,12 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../pages/flashcards_page.dart';
 import '../service/language_service.dart';
+
+const String kDefaultLanguage = 'fr';
 
 class TrainingTab extends StatefulWidget {
   @override
@@ -20,26 +19,30 @@ class _TrainingTabState extends State<TrainingTab> {
   int dueCount = 0;
   bool loading = true;
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _firestoreVocabSub;
-  ValueListenable<dynamic>? _boxListenable;
-  Box? _box;
+  String _effectiveLanguage(dynamic value) {
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim().toLowerCase();
+    }
+    return kDefaultLanguage;
+  }
 
   @override
   void initState() {
     super.initState();
+    loadDueCount();
     LanguageService.instance.addListener(_onLangChanged);
-    _initListeners();
   }
 
   void _onLangChanged() {
-    // reinitialize listeners when language changes
-    _initListeners();
+    loadDueCount();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
     LanguageService.instance.removeListener(_onLangChanged);
-    _disposeListeners();
     super.dispose();
   }
 
@@ -48,6 +51,12 @@ class _TrainingTabState extends State<TrainingTab> {
     final u = auth.currentUser;
     if (u == null) return;
 
+    if (mounted) {
+      setState(() {
+        loading = true;
+      });
+    }
+
     final snap =
         await db.collection('users').doc(u.uid).collection('vocabulary').get();
 
@@ -55,7 +64,7 @@ class _TrainingTabState extends State<TrainingTab> {
 
     final words = snap.docs
         .map((d) => d.data())
-        .where((w) => w['language'] == null || w['language'] == currentLang)
+        .where((w) => _effectiveLanguage(w['language']) == currentLang)
         .toList();
 
     final due = words.where((w) {
@@ -70,98 +79,6 @@ class _TrainingTabState extends State<TrainingTab> {
       dueCount = due;
       loading = false;
     });
-  }
-
-  Future<void> _disposeListeners() async {
-    try {
-      await _firestoreVocabSub?.cancel();
-    } catch (_) {}
-    _firestoreVocabSub = null;
-
-    try {
-      if (_boxListenable != null)
-        _boxListenable!.removeListener(_onHiveChanged);
-    } catch (_) {}
-    _boxListenable = null;
-
-    try {
-      if (_box != null && _box!.isOpen) await _box!.close();
-    } catch (_) {}
-    _box = null;
-  }
-
-  Future<void> _initListeners() async {
-    // tear down existing first
-    await _disposeListeners();
-
-    final u = auth.currentUser;
-    if (u == null) return;
-
-    final currentLang = LanguageService.instance.currentLang;
-
-    // Firestore realtime listener
-    final coll = db.collection('users').doc(u.uid).collection('vocabulary');
-    _firestoreVocabSub = coll.snapshots().listen((snapshot) {
-      final now = DateTime.now();
-      int cnt = 0;
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final lang = data['language'];
-        if (lang != null && lang != currentLang) continue;
-
-        final n = data['nextReview'];
-        DateTime? t;
-        if (n is Timestamp)
-          t = n.toDate();
-        else if (n is String) t = DateTime.tryParse(n);
-
-        if (t == null || t.isBefore(now)) cnt++;
-      }
-
-      if (mounted)
-        setState(() {
-          dueCount = cnt;
-          loading = false;
-        });
-    });
-
-    // Hive local box listenable for immediate local updates
-    final boxName = 'vocab_${u.uid}_$currentLang';
-    try {
-      _box = Hive.isBoxOpen(boxName)
-          ? Hive.box(boxName)
-          : await Hive.openBox(boxName);
-      _boxListenable = _box!.listenable();
-      _boxListenable!.addListener(_onHiveChanged);
-      // initialize from box now
-      _onHiveChanged();
-    } catch (_) {
-      // ignore hive errors; firestore listener will still update counts
-    }
-  }
-
-  void _onHiveChanged() {
-    try {
-      if (_box == null) return;
-      final now = DateTime.now();
-      int cnt = 0;
-      for (final raw in _box!.values) {
-        final m =
-            raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
-        if (m['deleted'] == true) continue;
-        final n = m['nextReview'];
-        DateTime? t;
-        if (n is String)
-          t = DateTime.tryParse(n);
-        else if (n is Timestamp) t = n.toDate();
-        if (t == null || t.isBefore(now)) cnt++;
-      }
-      if (mounted)
-        setState(() {
-          dueCount = cnt;
-          loading = false;
-        });
-    } catch (_) {}
   }
 
   @override
