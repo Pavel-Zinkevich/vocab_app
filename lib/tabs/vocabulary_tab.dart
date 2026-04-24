@@ -94,6 +94,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
   }
 
   bool _isLegacyFrenchByCreatedAt(dynamic createdAt) {
+    if (createdAt == null) return false;
     final dt = parseCreatedAt(createdAt);
     return !dt.isAfter(kLegacyFrenchCutoff); // <= cutoff => French
   }
@@ -102,10 +103,18 @@ class _VocabularyTabState extends State<VocabularyTab> {
     required dynamic language,
     required dynamic createdAt,
   }) {
+    // IMPORTANT:
+    // If language is explicitly present, trust it first.
+    // Only use cutoff fallback for old docs that have no language.
+    if (_hasExplicitLanguage(language)) {
+      return _effectiveLanguage(language);
+    }
+
     if (_isLegacyFrenchByCreatedAt(createdAt)) {
       return 'fr';
     }
-    return _effectiveLanguage(language);
+
+    return kDefaultLanguage;
   }
 
   Map<String, dynamic> _toStringKeyedMap(dynamic raw) {
@@ -148,8 +157,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
         await box.put(key, updated);
       }
 
-      // Since each Hive box is language-specific, remove anything
-      // that does not belong in this box.
+      // Each Hive box is language-specific
       if (resolvedLang != currentLang) {
         await box.delete(key);
       }
@@ -244,19 +252,18 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
         if (data == null) continue;
 
+        final rawLanguage = data['language'];
         final docLang = _resolvedLanguage(
-          language: data['language'],
+          language: rawLanguage,
           createdAt: data['createdAt'],
         );
 
-        // Backfill Firestore if old doc should be French
-        if (docLang == 'fr' && data['language'] != 'fr') {
+        // Backfill ONLY if language is missing and cutoff says French
+        if (!_hasExplicitLanguage(rawLanguage) && docLang == 'fr') {
           doc.reference.set(
               {'language': 'fr'}, SetOptions(merge: true)).catchError((_) {});
         }
 
-        // If this doc does not belong in the currently opened language box,
-        // remove any stale local copy from this box.
         if (docLang != currentLang) {
           if (box.containsKey(localKey)) {
             await box.delete(localKey);
@@ -276,8 +283,12 @@ class _VocabularyTabState extends State<VocabularyTab> {
           'remoteId': doc.id,
           'deleted': false,
           'pending': false,
-          'createdAt': parseCreatedAt(data['createdAt']).toIso8601String(),
-          'updatedAt': parseCreatedAt(data['updatedAt']).toIso8601String(),
+          'createdAt': data['createdAt'] != null
+              ? parseCreatedAt(data['createdAt']).toIso8601String()
+              : null,
+          'updatedAt': data['updatedAt'] != null
+              ? parseCreatedAt(data['updatedAt']).toIso8601String()
+              : null,
           'language': docLang,
           '__localKey': localKey,
         };
@@ -360,7 +371,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
           createdAt: v['createdAt'],
         );
 
-        final payload = {
+        final basePayload = <String, dynamic>{
           'word': v['word'] ?? '',
           'translation': v['translation'] ?? '',
           'context': v['context'] ?? '',
@@ -369,7 +380,6 @@ class _VocabularyTabState extends State<VocabularyTab> {
           'nextReview': nextReviewDate != null
               ? Timestamp.fromDate(nextReviewDate)
               : FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
           'language': resolvedLang,
         };
@@ -378,10 +388,15 @@ class _VocabularyTabState extends State<VocabularyTab> {
           final remoteId = v['remoteId'];
 
           if (remoteId == null) {
+            final createPayload = <String, dynamic>{
+              ...basePayload,
+              'createdAt': FieldValue.serverTimestamp(),
+            };
+
             try {
-              await coll.doc(key).set(payload);
+              await coll.doc(key).set(createPayload);
             } catch (_) {
-              final docRef = await coll.add(payload);
+              final docRef = await coll.add(createPayload);
               final updated = Map<String, dynamic>.from(v);
               updated['remoteId'] = docRef.id;
               updated['pending'] = false;
@@ -403,7 +418,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
             updated['__localKey'] = key;
             await box.put(key, updated);
           } else {
-            await coll.doc(remoteId).set(payload, SetOptions(merge: true));
+            await coll.doc(remoteId).set(basePayload, SetOptions(merge: true));
 
             final updated = Map<String, dynamic>.from(v);
             updated['pending'] = false;
@@ -440,6 +455,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
       final now = DateTime.now().toUtc();
       final localKey = const Uuid().v4();
+      final currentLang = LanguageService.instance.currentLang;
 
       final item = {
         'word': word,
@@ -452,7 +468,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
         'deleted': false,
         'createdAt': now.toIso8601String(),
         'updatedAt': now.toIso8601String(),
-        'language': LanguageService.instance.currentLang,
+        'language': currentLang,
         '__localKey': localKey,
       };
 
@@ -532,18 +548,21 @@ class _VocabularyTabState extends State<VocabularyTab> {
       final v = raw != null ? _toStringKeyedMap(raw) : null;
 
       if (v == null) {
+        final now = DateTime.now().toUtc();
+        final currentLang = LanguageService.instance.currentLang;
+
         final newItem = {
           'word': word,
           'translation': translationController.text.trim(),
           'context': contextController.text.trim(),
           'status': 'learning',
           'step': 0,
-          'nextReview': DateTime.now().toIso8601String(),
+          'nextReview': now.toIso8601String(),
           'pending': true,
           'deleted': false,
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-          'language': LanguageService.instance.currentLang,
+          'createdAt': now.toIso8601String(),
+          'updatedAt': now.toIso8601String(),
+          'language': currentLang,
           '__localKey': docId,
         };
         await box.put(docId, newItem);

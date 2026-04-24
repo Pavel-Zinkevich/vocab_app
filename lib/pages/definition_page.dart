@@ -182,7 +182,8 @@ class _DefinitionPageState extends State<DefinitionPage> {
   /// --- Audio Preferences ---
   Future<void> _restoreAudioPref() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('wr_audio-fr'); // "index:speed"
+    final lang = LanguageService.instance.currentLang;
+    final raw = prefs.getString('wr_audio-$lang');
     if (raw != null) {
       final parts = raw.split(':');
       setState(() {
@@ -194,8 +195,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
   Future<void> _saveAudioPref() async {
     final prefs = await SharedPreferences.getInstance();
+    final lang = LanguageService.instance.currentLang;
     await prefs.setString(
-        'wr_audio-fr', '$_accentIndex:${_speed.toStringAsFixed(2)}');
+      'wr_audio-$lang',
+      '$_accentIndex:${_speed.toStringAsFixed(2)}',
+    );
   }
 
   /// --- Prepare audio player ---
