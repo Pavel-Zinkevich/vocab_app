@@ -93,7 +93,7 @@ String _cleanTranslation(String raw) {
   final grammarPattern = RegExp(
     r'\b('
     r'vtr|vi|adj|adv|prép|expr|loc|'
-    r'countable noun|uncountable noun|'
+    r'countable noun|uncountable noun| verb|'
     r'impers|prep|pron|v|insep|phrasal|v pron|interj|'
     r'nm|nf|npl|n|'
     r'v expr|v aux|v past p|'
