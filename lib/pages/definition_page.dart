@@ -28,7 +28,7 @@ class DefinitionPage extends StatefulWidget {
   State<DefinitionPage> createState() => _DefinitionPageState();
 }
 
-/// --- Global listen label (dynamic for FR/EN) ---
+/// --- Global listen label dynamic for FR/EN/ES ---
 String _listenLabel = 'ÉCOUTER:';
 
 /// --- Audio Dropdown Model ---
@@ -45,7 +45,6 @@ class _AudioDropdownValue {
 
 /// --- Word Sense Model ---
 class _Sense {
-  // source/target are generic names (source may be French or Spanish depending on mode)
   final String source;
   final String target;
   final List<String> sourceExamples;
@@ -82,34 +81,75 @@ class _AudioOption {
   _AudioOption(this.label, this.url);
 }
 
-/// --- Clean raw translations from grammar tags and symbols ---
+/// Extract visible text from a DOM node while removing WordReference grammar/POS tags.
+///
+/// Important:
+/// - WordReference puts grammar info inside `<em class="POS2" data-abbr="...">`.
+/// - We skip every `<em>` entirely.
+/// - We also skip any element with `data-abbr`.
+/// - We skip conjugation links like `⇒`.
+String _visibleTextWithoutGrammar(dom.Node node) {
+  if (node is dom.Text) {
+    return node.text;
+  }
+
+  if (node is dom.Element) {
+    final tag = node.localName?.toLowerCase() ?? '';
+
+    if (tag == 'script' ||
+        tag == 'style' ||
+        tag == 'noscript' ||
+        tag == 'em' ||
+        node.attributes.containsKey('data-abbr')) {
+      return '';
+    }
+
+    if (tag == 'a' && node.classes.contains('conjugate')) {
+      return '';
+    }
+
+    if (tag == 'br') {
+      return ' ';
+    }
+  }
+
+  return node.nodes.map(_visibleTextWithoutGrammar).join();
+}
+
+/// Clean raw translations without using grammar regex.
+///
+/// Grammar is removed before this by reading DOM text while skipping `<em>`
+/// and `data-abbr` elements.
 String _cleanTranslation(String raw) {
   String cleaned = raw;
 
-  // Remove everything after ⇒
-  if (cleaned.contains('⇒')) cleaned = cleaned.split('⇒')[0];
+  /// Safety fallback: if HTML is accidentally passed here, remove em/data-abbr.
+  if (cleaned.contains('<')) {
+    final fragment = html_parser.parseFragment(cleaned);
 
-  // Remove grammar tags
-  final grammarPattern = RegExp(
-    r'\b('
-    r'vtr|vi|adj|adv|prép|expr|loc|'
-    r'countable noun|uncountable noun| verb|'
-    r'impers|prep|pron|v|insep|phrasal|v pron|interj|'
-    r'nm|nf|npl|n|'
-    r'v expr|v aux|v past p|'
-    r'vtr \+ prep|vtr \+ refl'
-    r')\b',
-    caseSensitive: false,
-  );
-  cleaned = cleaned.replaceAll(grammarPattern, '');
+    fragment
+        .querySelectorAll(
+            'em, [data-abbr], script, style, noscript, a.conjugate')
+        .forEach((e) => e.remove());
 
-  // Remove extra symbols like "+"
-  cleaned = cleaned.replaceAll('+', '');
+    cleaned = fragment.text ?? '';
+  }
 
-  // Normalize spaces
-  cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+  /// Safety fallback for conjugation arrows.
+  if (cleaned.contains('⇒')) {
+    cleaned = cleaned.split('⇒')[0];
+  }
+
+  cleaned =
+      cleaned.replaceAll('\u00a0', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
 
   return cleaned;
+}
+
+/// Clean text from a specific DOM element, excluding grammar/POS tags.
+String _cleanElementText(dom.Element element, HtmlUnescape unescape) {
+  final raw = _visibleTextWithoutGrammar(element);
+  return _cleanTranslation(unescape.convert(raw));
 }
 
 /// --- Definition Page State ---
@@ -153,12 +193,9 @@ class _DefinitionPageState extends State<DefinitionPage> {
         'context':
             sense.sourceExamples.isNotEmpty ? sense.sourceExamples.first : '',
         'language': LanguageService.instance.currentLang,
-
-        // ✅ SRS fields (CRITICAL)
         'status': 'learning',
         'step': 0,
-        'nextReview': FieldValue.serverTimestamp(), // due immediately
-
+        'nextReview': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -166,15 +203,17 @@ class _DefinitionPageState extends State<DefinitionPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Word "${sense.source}" added to vocabulary'),
-            duration: Duration(seconds: 1)),
+          content: Text('Word "${sense.source}" added to vocabulary'),
+          duration: const Duration(seconds: 1),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Failed to add word: $e'),
-            duration: Duration(seconds: 1)),
+          content: Text('Failed to add word: $e'),
+          duration: const Duration(seconds: 1),
+        ),
       );
     }
   }
@@ -184,6 +223,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     final prefs = await SharedPreferences.getInstance();
     final lang = LanguageService.instance.currentLang;
     final raw = prefs.getString('wr_audio-$lang');
+
     if (raw != null) {
       final parts = raw.split(':');
       setState(() {
@@ -196,6 +236,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
   Future<void> _saveAudioPref() async {
     final prefs = await SharedPreferences.getInstance();
     final lang = LanguageService.instance.currentLang;
+
     await prefs.setString(
       'wr_audio-$lang',
       '$_accentIndex:${_speed.toStringAsFixed(2)}',
@@ -205,15 +246,20 @@ class _DefinitionPageState extends State<DefinitionPage> {
   /// --- Prepare audio player ---
   Future<void> _preparePlayer() async {
     if (_audio.isEmpty) return;
-    _accentIndex = _accentIndex.clamp(0, _audio.length - 1);
+
+    _accentIndex = _accentIndex.clamp(0, _audio.length - 1).toInt();
+
     await _player.setUrl(_audio[_accentIndex].url);
     await _player.setSpeed(_speed);
   }
 
   /// --- Extract audio files from WordReference HTML ---
   List<_AudioOption> _extractAudioFiles(String html) {
-    final match = RegExp(r"window\.audioFiles\s*=\s*\[(.*?)\];", dotAll: true)
-        .firstMatch(html);
+    final match = RegExp(
+      r"window\.audioFiles\s*=\s*\[(.*?)\];",
+      dotAll: true,
+    ).firstMatch(html);
+
     if (match == null) return [];
 
     final urls = RegExp(r"'([^']+\.mp3)'")
@@ -225,6 +271,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
       final parts = path.split('/');
       final label = parts.length >= 4 ? parts[parts.length - 2] : 'Unknown';
       final absolute = 'https://www.wordreference.com$path';
+
       return _AudioOption(label, absolute);
     }).toList();
   }
@@ -242,6 +289,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
     final wordEsc = Uri.encodeComponent(widget.word.trim());
     final langCode =
         LanguageService.instance.currentLang == 'fr' ? 'fren' : 'esen';
+
     final url = widget.wordUrl != null
         ? Uri.parse(widget.wordUrl!)
         : Uri.parse('https://www.wordreference.com/$langCode/$wordEsc');
@@ -260,32 +308,33 @@ class _DefinitionPageState extends State<DefinitionPage> {
       _error = 'Failed to fetch definition. ${e.toString()}';
     }
 
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() => _loading = false);
+    }
   }
 
-  /// --- Detect if listen label should be EN/FR ---
+  /// --- Detect if listen label should be EN/FR/ES ---
   void _detectListenLabel(dom.Document document) {
-    // If app language is Spanish, prefer the Spanish label.
     if (LanguageService.instance.currentLang == 'es') {
       _listenLabel = 'ESCUCHAR:';
       return;
     }
 
     final listenSpan = document.querySelector('#listen_txt')?.text.trim() ?? '';
+
     if (listenSpan.toLowerCase().startsWith('listen')) {
       _listenLabel = 'LISTEN:';
     } else {
-      _listenLabel = 'ÉCOUTER:'; // default fallback (French)
+      _listenLabel = 'ÉCOUTER:';
     }
   }
 
   /// Choose an extra translation segment that fits within [maxLen] characters.
-  /// Prefer whole segments split by comma, then by slash. Return null if none fit.
   String? _chooseExtraSegment(String raw, {int maxLen = 50}) {
     final candidate = raw.trim();
+
     if (candidate.length <= maxLen) return candidate;
 
-    // Try comma-separated pieces
     if (candidate.contains(',')) {
       for (final part in candidate.split(',')) {
         final p = part.trim();
@@ -293,7 +342,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
       }
     }
 
-    // Try slash-separated pieces
     if (candidate.contains('/')) {
       for (final part in candidate.split('/')) {
         final p = part.trim();
@@ -301,7 +349,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
       }
     }
 
-    // No whole piece fits within the limit; don't include partials.
     return null;
   }
 
@@ -309,12 +356,12 @@ class _DefinitionPageState extends State<DefinitionPage> {
   void _parseHtml(String body) {
     final document = html_parser.parse(body);
 
-    // Remove scripts/styles
     document
         .querySelectorAll('script, style, noscript')
         .forEach((e) => e.remove());
 
     _detectListenLabel(document);
+
     _ipa = document.querySelector('#pronWR')?.text.trim();
 
     if (widget.showAudio) {
@@ -322,7 +369,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
       _preparePlayer().catchError((_) {});
     }
 
-    dom.Element? content =
+    final dom.Element? content =
         document.querySelector('#articleWRD') ?? _fallbackSelector(document);
 
     if (content == null) return;
@@ -331,8 +378,10 @@ class _DefinitionPageState extends State<DefinitionPage> {
     final tables = content.querySelectorAll('table');
 
     for (final table in tables) {
-      if (!(table.attributes['class'] ?? '').toLowerCase().contains('wrd'))
-        continue;
+      final className = (table.attributes['class'] ?? '').toLowerCase();
+
+      if (!className.contains('wrd')) continue;
+
       _parseTableRows(table, unescape);
     }
 
@@ -342,11 +391,19 @@ class _DefinitionPageState extends State<DefinitionPage> {
   }
 
   dom.Element? _fallbackSelector(dom.Document doc) {
-    final selectors = ['#article', '#content', '.entry', '.WRD', '#centerCol'];
+    final selectors = [
+      '#article',
+      '#content',
+      '.entry',
+      '.WRD',
+      '#centerCol',
+    ];
+
     for (final sel in selectors) {
       final el = doc.querySelector(sel);
       if (el != null) return el;
     }
+
     return null;
   }
 
@@ -371,12 +428,15 @@ class _DefinitionPageState extends State<DefinitionPage> {
             ElevatedButton(
               onPressed: () {
                 final word = lookupController.text.trim();
+
                 if (word.isNotEmpty) {
                   Navigator.pop(context);
+
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => DefinitionPage(word: word)),
+                      builder: (_) => DefinitionPage(word: word),
+                    ),
                   );
                 }
               },
@@ -388,13 +448,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
     );
   }
 
-  /// --- UI badge helpers ---
-  // String get _badgeLabel {
-  //   final cur = LanguageService.instance.currentLang;
-  //   if (cur == 'fr') return 'French → English';
-  //   if (cur == 'es') return 'Spanish → English';
-  //   return 'Link to the site';
-  // }
   String get _badgeLabel {
     return 'Link to the site';
   }
@@ -402,17 +455,24 @@ class _DefinitionPageState extends State<DefinitionPage> {
   String get _badgeUrl {
     final langCode =
         LanguageService.instance.currentLang == 'fr' ? 'fren' : 'esen';
+
     return widget.wordUrl ??
-        'https://www.wordreference.com/$langCode/${widget.word}';
+        'https://www.wordreference.com/$langCode/${Uri.encodeComponent(widget.word)}';
   }
 
   /// --- Parse table rows for senses and examples ---
   void _parseTableRows(dom.Element table, HtmlUnescape unescape) {
     bool isHeaderRow(dom.Element tr) {
+      final text = tr.text.toLowerCase();
+
       return tr.querySelectorAll('th').isNotEmpty ||
           tr.classes.contains('langHeader') ||
-          (tr.text.toLowerCase().contains('principales traductions') ||
-              tr.text.toLowerCase().contains('français → anglais'));
+          text.contains('principal translations') ||
+          text.contains('principales traductions') ||
+          text.contains('français') ||
+          text.contains('anglais') ||
+          text.contains('spanish') ||
+          text.contains('english');
     }
 
     for (final tr in table.querySelectorAll('tr')) {
@@ -420,36 +480,34 @@ class _DefinitionPageState extends State<DefinitionPage> {
 
       final frTd = tr.querySelector('td.FrWrd');
       final toTd = tr.querySelector('td.ToWrd');
-      final frExTd = tr.querySelector("td.FrEx");
-      final toExTd = tr.querySelector("td.ToEx");
+      final frExTd = tr.querySelector('td.FrEx');
+      final toExTd = tr.querySelector('td.ToEx');
 
       if (frTd != null && toTd != null) {
-        // --- NORMAL CASE (new sense) ---
-        final sourceWord = frTd.text.trim();
-        final targetWord = toTd.text.trim();
+        final sourceWord = _cleanElementText(frTd, unescape);
+        final targetWord = _cleanElementText(toTd, unescape);
 
         if (sourceWord.isEmpty || targetWord.isEmpty) continue;
 
         final sense = _Sense(
-          source: unescape.convert(sourceWord),
-          target: _cleanTranslation(unescape.convert(targetWord)),
+          source: sourceWord,
+          target: targetWord,
         );
 
         _attachExamples(sense, frExTd, toExTd, unescape);
         _senses.add(sense);
       } else if (frTd == null && toTd != null && _senses.isNotEmpty) {
-        // --- additional translation for previous sense ---
-        final extraTranslation =
-            _cleanTranslation(unescape.convert(toTd.text.trim()));
+        final extraTranslation = _cleanElementText(toTd, unescape);
 
         if (extraTranslation.isNotEmpty) {
-          // Pick a whole extra translation segment to append (no mid-word truncation).
           final chosen = _chooseExtraSegment(extraTranslation, maxLen: 20);
+
           if (chosen != null && chosen.isNotEmpty) {
             final lastIndex = _senses.length - 1;
             final last = _senses.last;
+
             _senses[lastIndex] = last.copyWith(
-              target: "${last.target} / $chosen",
+              target: '${last.target} / $chosen',
             );
           }
         }
@@ -460,24 +518,41 @@ class _DefinitionPageState extends State<DefinitionPage> {
       }
     }
 
-    // Deduplicate examples
     for (final s in _senses) {
       s.sourceExamples.replaceRange(
-          0, s.sourceExamples.length, s.sourceExamples.toSet().toList());
+        0,
+        s.sourceExamples.length,
+        s.sourceExamples.toSet().toList(),
+      );
+
       s.targetExamples.replaceRange(
-          0, s.targetExamples.length, s.targetExamples.toSet().toList());
+        0,
+        s.targetExamples.length,
+        s.targetExamples.toSet().toList(),
+      );
     }
   }
 
-  void _attachExamples(_Sense sense, dom.Element? frExTd, dom.Element? toExTd,
-      HtmlUnescape unescape) {
+  void _attachExamples(
+    _Sense sense,
+    dom.Element? frExTd,
+    dom.Element? toExTd,
+    HtmlUnescape unescape,
+  ) {
     if (frExTd != null) {
-      final fe = frExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (fe.isNotEmpty) sense.sourceExamples.add(unescape.convert(fe));
+      final fe = _cleanElementText(frExTd, unescape);
+
+      if (fe.isNotEmpty) {
+        sense.sourceExamples.add(fe);
+      }
     }
+
     if (toExTd != null) {
-      final te = toExTd.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-      if (te.isNotEmpty) sense.targetExamples.add(unescape.convert(te));
+      final te = _cleanElementText(toExTd, unescape);
+
+      if (te.isNotEmpty) {
+        sense.targetExamples.add(te);
+      }
     }
   }
 
@@ -485,11 +560,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
   @override
   Widget build(BuildContext context) {
     final surface = Theme.of(context).colorScheme.surface;
+
     return Scaffold(
       backgroundColor:
           Theme.of(context).extension<AppSemanticColors>()?.pageBackground,
       appBar: AppBar(
-        // automaticallyImplyLeading: false, arrow
         elevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor:
@@ -499,8 +574,9 @@ class _DefinitionPageState extends State<DefinitionPage> {
       body: _loading
           ? Center(
               child: CircularProgressIndicator(
-                  color:
-                      Theme.of(context).extension<AppSemanticColors>()?.loader))
+                color: Theme.of(context).extension<AppSemanticColors>()?.loader,
+              ),
+            )
           : _error != null
               ? _buildError()
               : _buildContent(surface),
@@ -510,10 +586,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
             Theme.of(context).floatingActionButtonTheme.backgroundColor ??
                 Theme.of(context).colorScheme.primary,
         onPressed: _showLookupDialog,
-        child: Icon(Icons.search,
-            color:
-                Theme.of(context).floatingActionButtonTheme.foregroundColor ??
-                    Theme.of(context).colorScheme.onPrimary),
+        child: Icon(
+          Icons.search,
+          color: Theme.of(context).floatingActionButtonTheme.foregroundColor ??
+              Theme.of(context).colorScheme.onPrimary,
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
@@ -526,21 +603,25 @@ class _DefinitionPageState extends State<DefinitionPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error ?? 'Unknown error', textAlign: TextAlign.center),
+            Text(
+              _error ?? 'Unknown error',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 12),
             ElevatedButton(
-                onPressed: _fetchDefinition,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context)
-                          .floatingActionButtonTheme
-                          .backgroundColor ??
-                      Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context)
-                          .floatingActionButtonTheme
-                          .foregroundColor ??
-                      Theme.of(context).colorScheme.onPrimary,
-                ),
-                child: const Text('Retry')),
+              onPressed: _fetchDefinition,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context)
+                        .floatingActionButtonTheme
+                        .backgroundColor ??
+                    Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context)
+                        .floatingActionButtonTheme
+                        .foregroundColor ??
+                    Theme.of(context).colorScheme.onPrimary,
+              ),
+              child: const Text('Retry'),
+            ),
           ],
         ),
       ),
@@ -558,12 +639,13 @@ class _DefinitionPageState extends State<DefinitionPage> {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                  color: Theme.of(context)
-                          .extension<AppSemanticColors>()
-                          ?.cardShadow ??
-                      Colors.black12,
-                  blurRadius: 12,
-                  offset: Offset(0, 6))
+                color: Theme.of(context)
+                        .extension<AppSemanticColors>()
+                        ?.cardShadow ??
+                    Colors.black12,
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
             ],
           ),
           child: _buildContentCard(),
@@ -573,7 +655,6 @@ class _DefinitionPageState extends State<DefinitionPage> {
   }
 
   Widget _buildContentCard() {
-    /// Header
     final titleStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w800,
           fontSize: 28,
@@ -586,14 +667,11 @@ class _DefinitionPageState extends State<DefinitionPage> {
         Text(widget.word, style: titleStyle),
         const SizedBox(height: 10),
         Row(
-          ///badge
           children: [
             _Badge(label: _badgeLabel, url: _badgeUrl),
             const SizedBox(width: 12),
           ],
         ),
-
-        ///audio
         const SizedBox(height: 12),
         if (widget.showAudio && _audio.isNotEmpty) ...[
           _buildAudioBar(),
@@ -606,8 +684,12 @@ class _DefinitionPageState extends State<DefinitionPage> {
             itemCount: _senses.length,
             separatorBuilder: (_, __) =>
                 const Divider(height: 24, thickness: 0.6),
-            itemBuilder: (context, i) =>
-                _SenseTile(index: i, sense: _senses[i]),
+            itemBuilder: (context, i) {
+              return _SenseTile(
+                index: i,
+                sense: _senses[i],
+              );
+            },
           ),
       ],
     );
@@ -616,12 +698,13 @@ class _DefinitionPageState extends State<DefinitionPage> {
   /// --- Audio Bar Widget ---
   Widget _buildAudioBar() {
     final border = OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(
-            color: Theme.of(context)
-                    .extension<AppSemanticColors>()
-                    ?.controlBorder ??
-                Colors.black12));
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(
+        color:
+            Theme.of(context).extension<AppSemanticColors>()?.controlBorder ??
+                Colors.black12,
+      ),
+    );
 
     return Wrap(
       spacing: 8,
@@ -635,6 +718,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
           ),
           onPressed: () async {
             if (_audio.isEmpty) return;
+
             try {
               await _player.setUrl(_audio[_accentIndex].url);
               await _player.setSpeed(_speed);
@@ -670,19 +754,25 @@ class _DefinitionPageState extends State<DefinitionPage> {
                     );
                   }),
                   const DropdownMenuItem(
-                      enabled: false, child: Divider(thickness: 1)),
+                    enabled: false,
+                    child: Divider(thickness: 1),
+                  ),
                   const DropdownMenuItem(
-                      value: _AudioDropdownValue.speed(1.0),
-                      child: Text('100%')),
+                    value: _AudioDropdownValue.speed(1.0),
+                    child: Text('100%'),
+                  ),
                   const DropdownMenuItem(
-                      value: _AudioDropdownValue.speed(0.75),
-                      child: Text('75%')),
+                    value: _AudioDropdownValue.speed(0.75),
+                    child: Text('75%'),
+                  ),
                   const DropdownMenuItem(
-                      value: _AudioDropdownValue.speed(0.5),
-                      child: Text('50%')),
+                    value: _AudioDropdownValue.speed(0.5),
+                    child: Text('50%'),
+                  ),
                 ],
                 onChanged: (val) async {
                   if (val == null) return;
+
                   if (val.isAccent) {
                     setState(() => _accentIndex = val.accentIndex!);
                     await _preparePlayer();
@@ -690,6 +780,7 @@ class _DefinitionPageState extends State<DefinitionPage> {
                     setState(() => _speed = val.speed!);
                     await _player.setSpeed(_speed);
                   }
+
                   await _saveAudioPref();
                 },
               ),
@@ -697,7 +788,10 @@ class _DefinitionPageState extends State<DefinitionPage> {
           ),
         ),
         if (_ipa != null && _ipa!.isNotEmpty)
-          Text(_ipa!, style: Theme.of(context).textTheme.bodyLarge),
+          Text(
+            _ipa!,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
       ],
     );
   }
@@ -708,7 +802,10 @@ class _Badge extends StatelessWidget {
   final String label;
   final String? url;
 
-  const _Badge({required this.label, this.url});
+  const _Badge({
+    required this.label,
+    this.url,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -718,8 +815,10 @@ class _Badge extends StatelessWidget {
     return GestureDetector(
       onTap: url != null
           ? () async {
-              if (await canLaunchUrl(Uri.parse(url!))) {
-                await launchUrl(Uri.parse(url!));
+              final uri = Uri.parse(url!);
+
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri);
               }
             }
           : null,
@@ -730,12 +829,14 @@ class _Badge extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(color: color.withOpacity(0.6)),
         ),
-        child: Text(label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
-                )),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+        ),
       ),
     );
   }
@@ -746,13 +847,14 @@ class _SenseTile extends StatelessWidget {
   final int index;
   final _Sense sense;
 
-  const _SenseTile({required this.index, required this.sense});
+  const _SenseTile({
+    required this.index,
+    required this.sense,
+  });
 
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context).textTheme.bodyLarge;
-    // posStyle removed - unused
-
     final state = context.findAncestorStateOfType<_DefinitionPageState>();
 
     return GestureDetector(
@@ -763,23 +865,25 @@ class _SenseTile extends StatelessWidget {
           RichText(
             text: TextSpan(
               style: base?.copyWith(
-                  color: Theme.of(context)
-                      .extension<AppSemanticColors>()
-                      ?.textPrimaryStrong),
+                color: Theme.of(context)
+                    .extension<AppSemanticColors>()
+                    ?.textPrimaryStrong,
+              ),
               children: [
                 TextSpan(
-                    text: '${index + 1}. ',
-                    style: base?.copyWith(fontWeight: FontWeight.w600)),
+                  text: '${index + 1}. ',
+                  style: base?.copyWith(fontWeight: FontWeight.w600),
+                ),
                 TextSpan(
                   text: _cleanTranslation(sense.source),
                   style: base?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 TextSpan(
-                  text: " - ",
+                  text: ' - ',
                   style: base?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 TextSpan(
-                  text: ' ${sense.target}',
+                  text: sense.target,
                   style: base?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
@@ -792,9 +896,13 @@ class _SenseTile extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildExamples(List<String> examples, BuildContext context,
-      {bool italic = false}) {
+  List<Widget> _buildExamples(
+    List<String> examples,
+    BuildContext context, {
+    bool italic = false,
+  }) {
     if (examples.isEmpty) return [];
+
     return [
       const SizedBox(height: 6),
       Padding(
@@ -803,45 +911,15 @@ class _SenseTile extends StatelessWidget {
           examples.first,
           style: italic
               ? Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontStyle: FontStyle.italic,
-                  color: Theme.of(context)
-                      .extension<AppSemanticColors>()
-                      ?.textPrimaryStrong
-                      .withOpacity(0.7))
+                    fontStyle: FontStyle.italic,
+                    color: Theme.of(context)
+                        .extension<AppSemanticColors>()
+                        ?.textPrimaryStrong
+                        .withOpacity(0.7),
+                  )
               : Theme.of(context).textTheme.bodyMedium,
         ),
       ),
     ];
-  }
-
-  ///useless
-  static List<InlineSpan> _formatTermSpans(String raw,
-      {required bool isLemma, TextStyle? base, TextStyle? pos}) {
-    final spans = <InlineSpan>[];
-    final posPattern = RegExp(
-        r'\b(loc v|loc adv|loc adj|vi|vt|nm|nf|n|adj|adv|expr|prep|pron|conj|interj)\b',
-        caseSensitive: false);
-    final match = posPattern.firstMatch(raw);
-
-    if (match == null) {
-      spans.add(TextSpan(
-          text: raw,
-          style: base?.copyWith(
-              fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600)));
-      return spans;
-    }
-
-    final before = raw.substring(0, match.start).trimRight();
-    final posToken = match.group(0)!;
-    final after = raw.substring(match.end).trimLeft();
-
-    if (before.isNotEmpty)
-      spans.add(TextSpan(
-          text: before,
-          style: base?.copyWith(
-              fontWeight: isLemma ? FontWeight.w700 : FontWeight.w600)));
-    spans.add(TextSpan(text: ' ${posToken.toLowerCase()}', style: pos));
-    if (after.isNotEmpty) spans.add(TextSpan(text: ' $after', style: base));
-    return spans;
   }
 }

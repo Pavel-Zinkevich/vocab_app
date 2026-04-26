@@ -1221,19 +1221,12 @@ PODS:
   - Firebase/Firestore (12.12.0):
     - Firebase/CoreOnly
     - FirebaseFirestore (~> 12.12.0)
-  - Firebase/Storage (12.12.0):
-    - Firebase/CoreOnly
-    - FirebaseStorage (~> 12.12.0)
   - firebase_auth (6.4.0):
     - Firebase/Auth (= 12.12.0)
     - firebase_core
     - Flutter
   - firebase_core (4.7.0):
     - Firebase/CoreOnly (= 12.12.0)
-    - Flutter
-  - firebase_storage (13.3.0):
-    - Firebase/Storage (= 12.12.0)
-    - firebase_core
     - Flutter
   - FirebaseAppCheckInterop (12.12.0)
   - FirebaseAuth (12.12.0):
@@ -1275,13 +1268,6 @@ PODS:
     - leveldb-library (~> 1.22)
     - nanopb (~> 3.30910.0)
   - FirebaseSharedSwift (12.12.0)
-  - FirebaseStorage (12.12.1):
-    - FirebaseAppCheckInterop (~> 12.12.0)
-    - FirebaseAuthInterop (~> 12.12.0)
-    - FirebaseCore (~> 12.12.0)
-    - FirebaseCoreExtension (~> 12.12.0)
-    - GoogleUtilities/Environment (~> 8.1)
-    - GTMSessionFetcher/Core (< 6.0, >= 3.4)
   - Flutter (1.0.0)
   - flutter_image_compress_common (1.0.0):
     - Flutter
@@ -1468,7 +1454,6 @@ DEPENDENCIES:
   - cloud_firestore (from `.symlinks/plugins/cloud_firestore/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
-  - firebase_storage (from `.symlinks/plugins/firebase_storage/ios`)
   - Flutter (from `Flutter`)
   - flutter_image_compress_common (from `.symlinks/plugins/flutter_image_compress_common/ios`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
@@ -1493,7 +1478,6 @@ SPEC REPOS:
     - FirebaseFirestore
     - FirebaseFirestoreInternal
     - FirebaseSharedSwift
-    - FirebaseStorage
     - GoogleSignIn
     - GoogleUtilities
     - "gRPC-C++"
@@ -1520,8 +1504,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/firebase_auth/ios"
   firebase_core:
     :path: ".symlinks/plugins/firebase_core/ios"
-  firebase_storage:
-    :path: ".symlinks/plugins/firebase_storage/ios"
   Flutter:
     :path: Flutter
   flutter_image_compress_common:
@@ -1548,7 +1530,6 @@ SPEC CHECKSUMS:
   Firebase: aa154fee4e9b8eac17aa42344988865b3e857d33
   firebase_auth: b0aa0a5964e23fba1bf7f32603437edc33b889c4
   firebase_core: 9156a152117c843440b0b990c785aa0259bc5447
-  firebase_storage: ef547439afc96fe8ee856de3878ed28e1c5a88e8
   FirebaseAppCheckInterop: c63ae0d003274f145174849c545ab861593beaf9
   FirebaseAuth: bcfebbc0ca055a6335f2252a90e57363d7ea5e65
   FirebaseAuthInterop: 917aa3a17ecf144d5f1823b51ef372da06909a4b
@@ -1558,7 +1539,6 @@ SPEC CHECKSUMS:
   FirebaseFirestore: 01e964d312cf17e56925c955b19798848775a7fd
   FirebaseFirestoreInternal: 9d9fd7eadbe0f19310fd7df06470a04baeaf3f36
   FirebaseSharedSwift: bccaff90721d14bafc14be34f28b77fdd7c91dc9
-  FirebaseStorage: b3682c96ae7016420c1f6eb43d45057a0e909c9f
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_image_compress_common: 1697a328fd72bfb335507c6bca1a65fa5ad87df1
   google_sign_in_ios: 000870aa06da9b28d1d0bf7ef70ff0213059dd28
