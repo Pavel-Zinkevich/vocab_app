@@ -218,6 +218,27 @@ class _DefinitionPageState extends State<DefinitionPage> {
     }
   }
 
+  String _normalizeWord(String input) {
+    return input.replaceAll('’', "'").replaceAll('`', "'").trim();
+  }
+
+  /// Build a WordReference path-segment encoded string WITHOUT using
+  /// Uri.encodeComponent to avoid double-encoding differences.
+  /// Rules applied (intentional and minimal):
+  /// - keep letter case as-is
+  /// - replace space with %20
+  /// - replace ' with %27
+  /// - replace ! with %21
+  /// - trim and normalize apostrophes first via _normalizeWord
+  String _wrEncode(String input) {
+    final s = _normalizeWord(input);
+    // perform minimal, deterministic replacements
+    return s
+        .replaceAll(' ', '%20')
+        .replaceAll("'", '%27')
+        .replaceAll('!', '%21');
+  }
+
   /// --- Audio Preferences ---
   Future<void> _restoreAudioPref() async {
     final prefs = await SharedPreferences.getInstance();
@@ -286,13 +307,17 @@ class _DefinitionPageState extends State<DefinitionPage> {
       _ipa = null;
     });
 
-    final wordEsc = Uri.encodeComponent(widget.word.trim());
+    final normalized = _normalizeWord(widget.word);
+
     final langCode =
         LanguageService.instance.currentLang == 'fr' ? 'fren' : 'esen';
 
     final url = widget.wordUrl != null
         ? Uri.parse(widget.wordUrl!)
-        : Uri.parse('https://www.wordreference.com/$langCode/$wordEsc');
+        : Uri.parse(
+            'https://www.wordreference.com/$langCode/${_wrEncode(normalized)}');
+
+    print('🔗 WordReference URL: $url');
 
     try {
       final resp = await http.get(url).timeout(const Duration(seconds: 12));
@@ -456,8 +481,10 @@ class _DefinitionPageState extends State<DefinitionPage> {
     final langCode =
         LanguageService.instance.currentLang == 'fr' ? 'fren' : 'esen';
 
+    final normalized = _normalizeWord(widget.word);
+
     return widget.wordUrl ??
-        'https://www.wordreference.com/$langCode/${Uri.encodeComponent(widget.word)}';
+        'https://www.wordreference.com/$langCode/${_wrEncode(normalized)}';
   }
 
   /// --- Parse table rows for senses and examples ---
